@@ -12,5 +12,7 @@
         "build.zig",
         "build.zig.zon",
         "README.md",
+        "COPYING",
+        ".HEADER"
     },
 }

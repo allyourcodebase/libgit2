@@ -1,0 +1,16 @@
+.{
+    .name = "libgit2",
+    .version = "1.8.1",
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{
+        .libgit2 = .{
+            .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.8.1.tar.gz",
+            .hash = "12208db692747f305b79ecfb3ac69e691d0b9584383ec4bcb0eb07b62b73de77b1cf",
+        }
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "README.md",
+    },
+}

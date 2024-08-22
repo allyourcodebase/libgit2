@@ -304,6 +304,30 @@ pub fn build(b: *std.Build) !void {
         example_run.step.dependOn(&examples_install.step);
         examples_step.dependOn(&example_run.step);
     }
+
+    const tests_step = b.step("run-tests", "Tests");
+    {
+        const tests = b.addTest(.{
+            .root_source_file = b.path("tests/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+
+        const fixture = b.addOptions();
+        fixture.addOptionPath("resources", libgit_src.path("tests/resources"));
+
+        tests.root_module.addOptions("fixture", fixture);
+
+        tests.addConfigHeader(features);
+        tests.addIncludePath(libgit_src.path("include"));
+        tests.addIncludePath(libgit_src.path("src/util"));
+
+        tests.linkLibrary(lib);
+
+        const tests_run = b.addRunArtifact(tests);
+        tests_step.dependOn(&tests_run.step);
+    }
 }
 
 const libgit_sources = [_][]const u8{

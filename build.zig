@@ -40,6 +40,11 @@ pub fn build(b: *std.Build) !void {
         "-fno-sanitize=undefined",
     };
 
+    const openssl = switch (target.result.os.tag) {
+        .linux => b.option(bool, "enable-openssl", "Enable OpenSSL support") orelse false,
+        else => false,
+    };
+
     if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary("winhttp");
         lib.linkSystemLibrary("rpcrt4");
@@ -61,20 +66,37 @@ pub fn build(b: *std.Build) !void {
         lib.addWin32ResourceFile(.{ .file = libgit_src.path("src/libgit2/git2.rc") });
         lib.addCSourceFiles(.{ .root = libgit_root, .files = &util_win32_sources, .flags = &flags });
     } else {
-        // mbedTLS https and SHA backend
-        lib.linkSystemLibrary("mbedtls");
-        lib.linkSystemLibrary("mbedcrypto");
-        lib.linkSystemLibrary("mbedx509");
-        features.addValues(.{
-            .GIT_HTTPS = 1,
-            .GIT_MBEDTLS = 1,
-            .GIT_SHA1_MBEDTLS = 1,
-            .GIT_SHA256_MBEDTLS = 1,
+        if (openssl) {
+            // OpenSSL backend
+            const openssl_dep = b.dependency("openssl", .{});
+            const openssl_lib = openssl_dep.artifact("openssl");
+            lib.linkLibrary(openssl_lib);
+            features.addValues(.{
+                .GIT_HTTPS = 1,
+                .GIT_OPENSSL = 1,
+                .GIT_SHA1_OPENSSL = 1,
+                .GIT_SHA256_OPENSSL = 1,
 
-            .GIT_USE_FUTIMENS = 1,
-            .GIT_IO_POLL = 1,
-            .GIT_IO_SELECT = 1,
-        });
+                .GIT_USE_FUTIMENS = 1,
+                .GIT_IO_POLL = 1,
+                .GIT_IO_SELECT = 1,
+            });
+        } else {
+            // mbedTLS https and SHA backend
+            lib.linkSystemLibrary("mbedtls");
+            lib.linkSystemLibrary("mbedcrypto");
+            lib.linkSystemLibrary("mbedx509");
+            features.addValues(.{
+                .GIT_HTTPS = 1,
+                .GIT_MBEDTLS = 1,
+                .GIT_SHA1_MBEDTLS = 1,
+                .GIT_SHA256_MBEDTLS = 1,
+
+                .GIT_USE_FUTIMENS = 1,
+                .GIT_IO_POLL = 1,
+                .GIT_IO_SELECT = 1,
+            });
+        }
 
         // ntlmclient
         {
@@ -85,15 +107,30 @@ pub fn build(b: *std.Build) !void {
                 .link_libc = true,
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
+            if (openssl) addOpenSSLHeaders(ntlm);
+
+            const ntlm_cflags = .{
+                "-Wno-implicit-fallthrough",
+                "-DNTLM_STATIC=1",
+                "-DUNICODE_BUILTIN=1",
+                if (openssl)
+                    "-DCRYPT_OPENSSL"
+                else
+                    "-DCRYPT_MBEDTLS",
+            };
             ntlm.addCSourceFiles(.{
                 .root = libgit_root,
                 .files = &ntlm_sources,
-                .flags = &.{
-                    "-Wno-implicit-fallthrough",
-                    "-DNTLM_STATIC=1",
-                    "-DUNICODE_BUILTIN=1",
-                    "-DCRYPT_MBEDTLS",
+                .flags = &ntlm_cflags,
+            });
+            ntlm.addCSourceFiles(.{
+                .root = libgit_root,
+                .files = if (openssl) &.{
+                    "deps/ntlmclient/crypt_openssl.c",
+                } else &.{
+                    "deps/ntlmclient/crypt_mbedtls.c",
                 },
+                .flags = &ntlm_cflags,
             });
 
             lib.linkLibrary(ntlm);
@@ -104,6 +141,15 @@ pub fn build(b: *std.Build) !void {
         lib.addCSourceFiles(.{
             .root = libgit_root,
             .files = &util_unix_sources,
+            .flags = &flags,
+        });
+        lib.addCSourceFiles(.{
+            .root = libgit_root,
+            .files = if (openssl) &.{
+                "src/util/hash/openssl.c",
+            } else &.{
+                "src/util/hash/mbedtls.c",
+            },
             .flags = &flags,
         });
     }
@@ -249,6 +295,7 @@ pub fn build(b: *std.Build) !void {
         cli.addIncludePath(libgit_src.path("include"));
         cli.addIncludePath(libgit_src.path("src/util"));
         cli.addIncludePath(libgit_src.path("src/cli"));
+        if (openssl) addOpenSSLHeaders(cli);
 
         if (target.result.os.tag == .windows)
             cli.addCSourceFiles(.{ .root = libgit_root, .files = &cli_win32_sources })
@@ -293,6 +340,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         exe.addIncludePath(libgit_src.path("include"));
+        if (openssl) addOpenSSLHeaders(exe);
         exe.linkLibrary(lib);
 
         // independent install step so you can easily access the binary
@@ -322,12 +370,20 @@ pub fn build(b: *std.Build) !void {
         tests.addConfigHeader(features);
         tests.addIncludePath(libgit_src.path("include"));
         tests.addIncludePath(libgit_src.path("src/util"));
+        if (openssl) addOpenSSLHeaders(tests);
 
         tests.linkLibrary(lib);
 
         const tests_run = b.addRunArtifact(tests);
         tests_step.dependOn(&tests_run.step);
     }
+}
+
+fn addOpenSSLHeaders(compile: *std.Build.Step.Compile) void {
+    const b = compile.step.owner;
+    const openssl_dep = b.dependency("openssl", .{});
+    const openssl_lib = openssl_dep.artifact("openssl");
+    compile.addIncludePath(openssl_lib.getEmittedIncludeTree());
 }
 
 const libgit_sources = [_][]const u8{
@@ -502,8 +558,6 @@ const util_unix_sources = [_][]const u8{
     "src/util/unix/map.c",
     "src/util/unix/process.c",
     "src/util/unix/realpath.c",
-
-    "src/util/hash/mbedtls.c",
 };
 
 const util_win32_sources = [_][]const u8{
@@ -579,7 +633,6 @@ const xdiff_sources = [_][]const u8{
 
 const ntlm_sources = [_][]const u8{
     "deps/ntlmclient/crypt_builtin_md4.c",
-    "deps/ntlmclient/crypt_mbedtls.c",
     "deps/ntlmclient/ntlm.c",
     "deps/ntlmclient/unicode_builtin.c",
     "deps/ntlmclient/util.c",

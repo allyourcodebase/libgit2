@@ -40,12 +40,14 @@ pub fn build(b: *std.Build) !void {
         "-fno-sanitize=undefined",
     };
 
-    const openssl = switch (target.result.os.tag) {
-        .linux => b.option(bool, "enable-openssl", "Enable OpenSSL support") orelse false,
-        else => false,
-    };
+    const openssl = b.option(bool, "enable-openssl", "Use OpenSSL instead of MbedTLS") orelse false;
 
     if (target.result.os.tag == .windows) {
+        if (openssl) {
+            std.log.err("OpenSSL option unsupported on Windows", .{});
+            return;
+        }
+
         lib.linkSystemLibrary("winhttp");
         lib.linkSystemLibrary("rpcrt4");
         lib.linkSystemLibrary("crypt32");

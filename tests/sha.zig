@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 
 const c = @cImport({
+    @cInclude("git2.h");
     @cInclude("hash.h");
 });
 
@@ -25,10 +26,16 @@ fn calcHashFile(
     };
     const actual = try allocator.alloc(u8, size);
 
-    var r: c_int = undefined;
+    errdefer {
+        std.log.err("{s}", .{c.git_error_last().*.message});
+    }
+
+    if (c.git_libgit2_init() < 0) return error.Unexpected;
+    defer _ = c.git_libgit2_shutdown();
+
     var ctx: c.git_hash_ctx = undefined;
-    r = c.git_hash_ctx_init(&ctx, algorithm);
-    if (r != 0) return error.Unexpected;
+    if (c.git_hash_ctx_init(&ctx, algorithm) != 0)
+        return error.Unexpected;
     defer c.git_hash_ctx_cleanup(&ctx);
 
     const reader = file.reader();
@@ -36,12 +43,12 @@ fn calcHashFile(
         var buf: [2048]u8 = undefined;
         const len = try reader.read(&buf);
         if (len == 0) break;
-        r = c.git_hash_update(&ctx, &buf, len);
-        if (r != 0) return error.Unexpected;
+        if (c.git_hash_update(&ctx, &buf, len) != 0)
+            return error.Unexpected;
     }
 
-    r = c.git_hash_final(actual.ptr, &ctx);
-    if (r != 0) return error.Unexpected;
+    if (c.git_hash_final(actual.ptr, &ctx) != 0)
+        return error.Unexpected;
 
     return actual;
 }

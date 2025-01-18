@@ -4,6 +4,11 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const mbedtls_dep = b.dependency("mbedtls", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const libgit_src = b.dependency("libgit2", .{});
     const libgit_root = libgit_src.path(".");
 
@@ -85,9 +90,7 @@ pub fn build(b: *std.Build) !void {
             });
         } else {
             // mbedTLS https and SHA backend
-            lib.linkSystemLibrary("mbedtls");
-            lib.linkSystemLibrary("mbedcrypto");
-            lib.linkSystemLibrary("mbedx509");
+            lib.linkLibrary(mbedtls_dep.artifact("mbedtls"));
             features.addValues(.{
                 .GIT_HTTPS = 1,
                 .GIT_MBEDTLS = 1,
@@ -109,7 +112,11 @@ pub fn build(b: *std.Build) !void {
                 .link_libc = true,
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
-            if (openssl) addOpenSSLHeaders(ntlm);
+            if (openssl) {
+                addOpenSSLHeaders(ntlm);
+            } else {
+                ntlm.linkLibrary(mbedtls_dep.artifact("mbedtls"));
+            }
 
             const ntlm_cflags = .{
                 "-Wno-implicit-fallthrough",

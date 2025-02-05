@@ -362,7 +362,7 @@ pub fn build(b: *std.Build) !void {
         examples_step.dependOn(&example_run.step);
     }
 
-    const tests_step = b.step("run-tests", "Tests");
+    const tests_step = b.step("test", "Run unit tests");
     {
         const tests = b.addTest(.{
             .root_source_file = b.path("tests/main.zig"),

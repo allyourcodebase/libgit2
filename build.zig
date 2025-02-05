@@ -4,11 +4,6 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const mbedtls_dep = b.dependency("mbedtls", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const libgit_src = b.dependency("libgit2", .{});
     const libgit_root = libgit_src.path(".");
 
@@ -46,6 +41,7 @@ pub fn build(b: *std.Build) !void {
     };
 
     const openssl = b.option(bool, "enable-openssl", "Use OpenSSL instead of MbedTLS") orelse false;
+    var tls_dep: ?*std.Build.Dependency = null;
 
     if (target.result.os.tag == .windows) {
         if (openssl) {
@@ -75,9 +71,11 @@ pub fn build(b: *std.Build) !void {
     } else {
         if (openssl) {
             // OpenSSL backend
-            const openssl_dep = b.dependency("openssl", .{});
-            const openssl_lib = openssl_dep.artifact("openssl");
-            lib.linkLibrary(openssl_lib);
+            tls_dep = b.lazyDependency("openssl", .{
+                .target = target,
+                .optimize = optimize,
+            });
+            if (tls_dep) |tls| lib.linkLibrary(tls.artifact("openssl"));
             features.addValues(.{
                 .GIT_HTTPS = 1,
                 .GIT_OPENSSL = 1,
@@ -89,8 +87,12 @@ pub fn build(b: *std.Build) !void {
                 .GIT_IO_SELECT = 1,
             });
         } else {
-            // mbedTLS https and SHA backend
-            lib.linkLibrary(mbedtls_dep.artifact("mbedtls"));
+            // mbedTLS backend
+            tls_dep = b.lazyDependency("mbedtls", .{
+                .target = target,
+                .optimize = optimize,
+            });
+            if (tls_dep) |tls| lib.linkLibrary(tls.artifact("mbedtls"));
             features.addValues(.{
                 .GIT_HTTPS = 1,
                 .GIT_MBEDTLS = 1,
@@ -112,11 +114,7 @@ pub fn build(b: *std.Build) !void {
                 .link_libc = true,
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
-            if (openssl) {
-                addOpenSSLHeaders(ntlm);
-            } else {
-                ntlm.linkLibrary(mbedtls_dep.artifact("mbedtls"));
-            }
+            addTlsHeaders(ntlm, tls_dep, openssl);
 
             const ntlm_cflags = .{
                 "-Wno-implicit-fallthrough",
@@ -304,7 +302,7 @@ pub fn build(b: *std.Build) !void {
         cli.addIncludePath(libgit_src.path("include"));
         cli.addIncludePath(libgit_src.path("src/util"));
         cli.addIncludePath(libgit_src.path("src/cli"));
-        if (openssl) addOpenSSLHeaders(cli);
+        addTlsHeaders(cli, tls_dep, openssl);
 
         if (target.result.os.tag == .windows)
             cli.addCSourceFiles(.{ .root = libgit_root, .files = &cli_win32_sources })
@@ -349,7 +347,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         exe.addIncludePath(libgit_src.path("include"));
-        if (openssl) addOpenSSLHeaders(exe);
+        addTlsHeaders(exe, tls_dep, openssl);
         exe.linkLibrary(lib);
 
         // independent install step so you can easily access the binary
@@ -379,7 +377,7 @@ pub fn build(b: *std.Build) !void {
         tests.addConfigHeader(features);
         tests.addIncludePath(libgit_src.path("include"));
         tests.addIncludePath(libgit_src.path("src/util"));
-        if (openssl) addOpenSSLHeaders(tests);
+        addTlsHeaders(tests, tls_dep, openssl);
 
         tests.linkLibrary(lib);
 
@@ -388,11 +386,10 @@ pub fn build(b: *std.Build) !void {
     }
 }
 
-fn addOpenSSLHeaders(compile: *std.Build.Step.Compile) void {
-    const b = compile.step.owner;
-    const openssl_dep = b.dependency("openssl", .{});
-    const openssl_lib = openssl_dep.artifact("openssl");
-    compile.addIncludePath(openssl_lib.getEmittedIncludeTree());
+fn addTlsHeaders(compile: *std.Build.Step.Compile, tls_dep: ?*std.Build.Dependency, openssl_or_mbedtls: bool) void {
+    if (tls_dep) |tls| compile.addIncludePath(
+        tls.artifact(if (openssl_or_mbedtls) "openssl" else "mbedtls").getEmittedIncludeTree(),
+    );
 }
 
 const libgit_sources = [_][]const u8{

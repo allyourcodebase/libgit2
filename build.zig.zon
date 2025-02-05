@@ -11,6 +11,10 @@
             .url = "https://github.com/allyourcodebase/openssl/archive/refs/tags/3.3.1-1.tar.gz",
             .hash = "12207c40cefa38fe90e4230dfba2e5c76b37e1ee36602512cad8ff0501f892002a65",
         },
+        .mbedtls = .{
+            .url = "https://github.com/allyourcodebase/mbedtls/archive/40a2c1126b45f87d19b256229620bc2995637e5a.tar.gz",
+            .hash = "122034bd019496a4e20a775116c53ef05e3247e9a98436b3407d4c0503fa3a16cd42",
+        },
     },
     .paths = .{
         "build.zig",

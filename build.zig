@@ -60,7 +60,7 @@ pub fn build(b: *std.Build) !void {
             .GIT_HTTPS = 1,
             .GIT_WINHTTP = 1,
 
-            .GIT_SHA1_WIN32 = 1,
+            .GIT_SHA1_COLLISIONDETECT = 1,
             .GIT_SHA256_WIN32 = 1,
 
             .GIT_IO_WSAPOLL = 1,
@@ -79,7 +79,8 @@ pub fn build(b: *std.Build) !void {
             features.addValues(.{
                 .GIT_HTTPS = 1,
                 .GIT_OPENSSL = 1,
-                .GIT_SHA1_OPENSSL = 1,
+
+                .GIT_SHA1_COLLISIONDETECT = 1,
                 .GIT_SHA256_OPENSSL = 1,
 
                 .GIT_USE_FUTIMENS = 1,
@@ -87,7 +88,7 @@ pub fn build(b: *std.Build) !void {
                 .GIT_IO_SELECT = 1,
             });
         } else {
-            // mbedTLS backend
+            // MbedTLS backend
             tls_dep = b.lazyDependency("mbedtls", .{
                 .target = target,
                 .optimize = optimize,
@@ -96,7 +97,8 @@ pub fn build(b: *std.Build) !void {
             features.addValues(.{
                 .GIT_HTTPS = 1,
                 .GIT_MBEDTLS = 1,
-                .GIT_SHA1_MBEDTLS = 1,
+
+                .GIT_SHA1_COLLISIONDETECT = 1,
                 .GIT_SHA256_MBEDTLS = 1,
 
                 .GIT_USE_FUTIMENS = 1,
@@ -161,6 +163,17 @@ pub fn build(b: *std.Build) !void {
         });
     }
 
+    // SHA1 collisiondetect
+    lib.addCSourceFiles(.{
+        .root = libgit_root,
+        .files = &util_sha1dc_sources,
+        .flags = &(flags ++ .{
+            "-DSHA1DC_NO_STANDARD_INCLUDES",
+            "-DSHA1DC_CUSTOM_INCLUDE_SHA1_C=\"git2_util.h\"",
+            "-DSHA1DC_CUSTOM_INCLUDE_UBC_CHECK_C=\"git2_util.h\"",
+        }),
+    });
+
     if (b.option(bool, "enable-ssh", "Enable SSH support") orelse false) {
         lib.linkSystemLibrary("ssh2");
         features.addValues(.{
@@ -204,12 +217,11 @@ pub fn build(b: *std.Build) !void {
                 .PCRE_PARENS_NEST_LIMIT = 250,
                 .PCRE_MATCH_LIMIT = 10000000,
                 .PCRE_MATCH_LIMIT_RECURSION = "MATCH_LIMIT",
-                .NEWLINE = 10, // LF
+                .NEWLINE = '\n',
                 .NO_RECURSE = 1,
                 .PCRE_POSIX_MALLOC_THRESHOLD = 10,
                 .BSR_ANYCRLF = 0,
-                // "-DMAX_NAME_SIZE=32",
-                // "-DMAX_NAME_COUNT=10000",
+                .PCREGREP_BUFSIZE = null,
             },
         ));
         pcre.addIncludePath(libgit_src.path("deps/pcre"));
@@ -257,10 +269,6 @@ pub fn build(b: *std.Build) !void {
     {
         // Bundled xdiff dependency relies on libgit2 headers & utils, so we
         // just add the source files directly instead of making a static lib step.
-
-        // (Note from CMakeLists file:
-        // the xdiff dependency is not (yet) warning-free, disable warnings
-        // as errors for the xdiff sources until we've sorted them out)
         lib.addCSourceFiles(.{
             .root = libgit_root,
             .files = &xdiff_sources,
@@ -317,7 +325,7 @@ pub fn build(b: *std.Build) !void {
             // .flags = &.{"-std=c90"},
         });
 
-        // independant install step so you can easily access the binary
+        // independent install step so you can easily access the binary
         const cli_install = b.addInstallArtifact(cli, .{});
         const cli_run = b.addRunArtifact(cli);
         if (b.args) |args| {
@@ -437,9 +445,9 @@ const libgit_sources = [_][]const u8{
     "src/libgit2/graph.c",
     "src/libgit2/hashsig.c",
     "src/libgit2/ident.c",
-    "src/libgit2/idxmap.c",
     "src/libgit2/ignore.c",
     "src/libgit2/index.c",
+    "src/libgit2/index_map.c",
     "src/libgit2/indexer.c",
     "src/libgit2/iterator.c",
     "src/libgit2/libgit2.c",
@@ -457,10 +465,8 @@ const libgit_sources = [_][]const u8{
     "src/libgit2/odb_loose.c",
     "src/libgit2/odb_mempack.c",
     "src/libgit2/odb_pack.c",
-    "src/libgit2/offmap.c",
     "src/libgit2/oid.c",
     "src/libgit2/oidarray.c",
-    "src/libgit2/oidmap.c",
     "src/libgit2/pack-objects.c",
     "src/libgit2/pack.c",
     "src/libgit2/parse.c",
@@ -530,6 +536,7 @@ const libgit_sources = [_][]const u8{
 
 const util_sources = [_][]const u8{
     "src/util/alloc.c",
+    "src/util/allocators/debugalloc.c",
     "src/util/allocators/failalloc.c",
     "src/util/allocators/stdalloc.c",
     "src/util/allocators/win32_leakcheck.c",
@@ -549,7 +556,6 @@ const util_sources = [_][]const u8{
     "src/util/sortedcache.c",
     "src/util/str.c",
     "src/util/strlist.c",
-    "src/util/strmap.c",
     "src/util/thread.c",
     "src/util/tsort.c",
     "src/util/utf8.c",
@@ -581,6 +587,12 @@ const util_win32_sources = [_][]const u8{
     "src/util/win32/w32_util.c",
 
     "src/util/hash/win32.c",
+};
+
+const util_sha1dc_sources = [_][]const u8{
+    "src/util/hash/collisiondetect.c",
+    "src/util/hash/sha1dc/sha1.c",
+    "src/util/hash/sha1dc/ubc_check.c",
 };
 
 const llhttp_sources = [_][]const u8{
@@ -646,12 +658,14 @@ const ntlm_sources = [_][]const u8{
 
 const cli_sources = [_][]const u8{
     "src/cli/cmd.c",
+    "src/cli/cmd_blame.c",
     "src/cli/cmd_cat_file.c",
     "src/cli/cmd_clone.c",
     "src/cli/cmd_config.c",
     "src/cli/cmd_hash_object.c",
     "src/cli/cmd_help.c",
     "src/cli/cmd_index_pack.c",
+    "src/cli/cmd_init.c",
     "src/cli/common.c",
     "src/cli/main.c",
     "src/cli/opt.c",

@@ -1,11 +1,11 @@
 .{
     .name = "libgit2",
-    .version = "1.8.1",
+    .version = "1.9.0",
     .minimum_zig_version = "0.13.0",
     .dependencies = .{
         .libgit2 = .{
-            .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.8.1.tar.gz",
-            .hash = "12208db692747f305b79ecfb3ac69e691d0b9584383ec4bcb0eb07b62b73de77b1cf",
+            .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.9.0.tar.gz",
+            .hash = "1220c7c470d6933d22e96211e85a4d7bab5748bcda3ee5adbc10603b8b1803043987",
         },
         .openssl = .{
             .url = "https://github.com/allyourcodebase/openssl/archive/refs/tags/3.3.1-1.tar.gz",

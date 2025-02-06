@@ -311,17 +311,19 @@ pub fn build(b: *std.Build) !void {
         cli.addIncludePath(libgit_src.path("src/cli"));
         maybeAddTlsIncludes(cli, tls_dep, tls_backend);
 
-        if (target.result.os.tag == .windows)
-            cli.addCSourceFiles(.{ .root = libgit_root, .files = &cli_win32_sources })
-        else
-            cli.addCSourceFiles(.{ .root = libgit_root, .files = &cli_unix_sources });
-
         cli.linkLibrary(lib);
         cli.addCSourceFiles(.{
             .root = libgit_root,
             .files = &cli_sources,
             // @Todo: see above
             // .flags = &.{"-std=c90"},
+        });
+        cli.addCSourceFiles(.{
+            .root = libgit_root,
+            .files = if (target.result.os.tag == .windows)
+                &.{"src/cli/win32/sighandler.c"}
+            else
+                &.{"src/cli/unix/sighandler.c"},
         });
 
         // independent install step so you can easily access the binary
@@ -680,14 +682,6 @@ const cli_sources = [_][]const u8{
     "src/cli/opt.c",
     "src/cli/opt_usage.c",
     "src/cli/progress.c",
-};
-
-const cli_win32_sources = [_][]const u8{
-    "src/cli/win32/sighandler.c",
-};
-
-const cli_unix_sources = [_][]const u8{
-    "src/cli/unix/sighandler.c",
 };
 
 const example_sources = [_][]const u8{

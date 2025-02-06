@@ -17,7 +17,7 @@ const libgit2_dep = b.dependency("libgit2", .{
     .target = target,
     .optimize = optimize,
     .@"enable-ssh" = true, // optional ssh support via libssh2
-    .@"enable-openssl" = true, // use openssl instead of mbedtls
+    .@"tls-backend" = .openssl, // use openssl instead of mbedtls
 });
 your_compile_step.linkLibrary(libgit_dep.artifact("git2"));
 ```

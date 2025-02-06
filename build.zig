@@ -40,15 +40,15 @@ pub fn build(b: *std.Build) !void {
         "-fno-sanitize=undefined",
     };
 
-    const openssl = b.option(bool, "enable-openssl", "Use OpenSSL instead of MbedTLS") orelse false;
+    // The TLS backend logic is only run for non windows builds.
     var tls_dep: ?*std.Build.Dependency = null;
+    const tls_backend = b.option(
+        TlsBackend,
+        "tls-backend",
+        "Choose Unix TLS/SSL backend (default is mbedtls)",
+    ) orelse .mbedtls;
 
     if (target.result.os.tag == .windows) {
-        if (openssl) {
-            std.log.err("OpenSSL option unsupported on Windows", .{});
-            return;
-        }
-
         lib.linkSystemLibrary("winhttp");
         lib.linkSystemLibrary("rpcrt4");
         lib.linkSystemLibrary("crypt32");
@@ -69,42 +69,43 @@ pub fn build(b: *std.Build) !void {
         lib.addWin32ResourceFile(.{ .file = libgit_src.path("src/libgit2/git2.rc") });
         lib.addCSourceFiles(.{ .root = libgit_root, .files = &util_win32_sources, .flags = &flags });
     } else {
-        if (openssl) {
-            // OpenSSL backend
-            tls_dep = b.lazyDependency("openssl", .{
-                .target = target,
-                .optimize = optimize,
-            });
-            if (tls_dep) |tls| lib.linkLibrary(tls.artifact("openssl"));
-            features.addValues(.{
-                .GIT_HTTPS = 1,
-                .GIT_OPENSSL = 1,
+        switch (tls_backend) {
+            .openssl => {
+                tls_dep = b.lazyDependency("openssl", .{
+                    .target = target,
+                    .optimize = optimize,
+                });
+                if (tls_dep) |tls| lib.linkLibrary(tls.artifact("openssl"));
+                features.addValues(.{
+                    .GIT_HTTPS = 1,
+                    .GIT_OPENSSL = 1,
 
-                .GIT_SHA1_COLLISIONDETECT = 1,
-                .GIT_SHA256_OPENSSL = 1,
+                    .GIT_SHA1_COLLISIONDETECT = 1,
+                    .GIT_SHA256_OPENSSL = 1,
 
-                .GIT_USE_FUTIMENS = 1,
-                .GIT_IO_POLL = 1,
-                .GIT_IO_SELECT = 1,
-            });
-        } else {
-            // MbedTLS backend
-            tls_dep = b.lazyDependency("mbedtls", .{
-                .target = target,
-                .optimize = optimize,
-            });
-            if (tls_dep) |tls| lib.linkLibrary(tls.artifact("mbedtls"));
-            features.addValues(.{
-                .GIT_HTTPS = 1,
-                .GIT_MBEDTLS = 1,
+                    .GIT_USE_FUTIMENS = 1,
+                    .GIT_IO_POLL = 1,
+                    .GIT_IO_SELECT = 1,
+                });
+            },
+            .mbedtls => {
+                tls_dep = b.lazyDependency("mbedtls", .{
+                    .target = target,
+                    .optimize = optimize,
+                });
+                if (tls_dep) |tls| lib.linkLibrary(tls.artifact("mbedtls"));
+                features.addValues(.{
+                    .GIT_HTTPS = 1,
+                    .GIT_MBEDTLS = 1,
 
-                .GIT_SHA1_COLLISIONDETECT = 1,
-                .GIT_SHA256_MBEDTLS = 1,
+                    .GIT_SHA1_COLLISIONDETECT = 1,
+                    .GIT_SHA256_MBEDTLS = 1,
 
-                .GIT_USE_FUTIMENS = 1,
-                .GIT_IO_POLL = 1,
-                .GIT_IO_SELECT = 1,
-            });
+                    .GIT_USE_FUTIMENS = 1,
+                    .GIT_IO_POLL = 1,
+                    .GIT_IO_SELECT = 1,
+                });
+            },
         }
 
         // ntlmclient
@@ -116,16 +117,16 @@ pub fn build(b: *std.Build) !void {
                 .link_libc = true,
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
-            addTlsHeaders(ntlm, tls_dep, openssl);
+            maybeAddTlsIncludes(ntlm, tls_dep, tls_backend);
 
             const ntlm_cflags = .{
                 "-Wno-implicit-fallthrough",
                 "-DNTLM_STATIC=1",
                 "-DUNICODE_BUILTIN=1",
-                if (openssl)
-                    "-DCRYPT_OPENSSL"
-                else
-                    "-DCRYPT_MBEDTLS",
+                switch (tls_backend) {
+                    .openssl => "-DCRYPT_OPENSSL",
+                    .mbedtls => "-DCRYPT_MBEDTLS",
+                },
             };
             ntlm.addCSourceFiles(.{
                 .root = libgit_root,
@@ -134,10 +135,9 @@ pub fn build(b: *std.Build) !void {
             });
             ntlm.addCSourceFiles(.{
                 .root = libgit_root,
-                .files = if (openssl) &.{
-                    "deps/ntlmclient/crypt_openssl.c",
-                } else &.{
-                    "deps/ntlmclient/crypt_mbedtls.c",
+                .files = switch (tls_backend) {
+                    .openssl => &.{"deps/ntlmclient/crypt_openssl.c"},
+                    .mbedtls => &.{"deps/ntlmclient/crypt_mbedtls.c"},
                 },
                 .flags = &ntlm_cflags,
             });
@@ -154,10 +154,9 @@ pub fn build(b: *std.Build) !void {
         });
         lib.addCSourceFiles(.{
             .root = libgit_root,
-            .files = if (openssl) &.{
-                "src/util/hash/openssl.c",
-            } else &.{
-                "src/util/hash/mbedtls.c",
+            .files = switch (tls_backend) {
+                .openssl => &.{"src/util/hash/openssl.c"},
+                .mbedtls => &.{"src/util/hash/mbedtls.c"},
             },
             .flags = &flags,
         });
@@ -310,7 +309,7 @@ pub fn build(b: *std.Build) !void {
         cli.addIncludePath(libgit_src.path("include"));
         cli.addIncludePath(libgit_src.path("src/util"));
         cli.addIncludePath(libgit_src.path("src/cli"));
-        addTlsHeaders(cli, tls_dep, openssl);
+        maybeAddTlsIncludes(cli, tls_dep, tls_backend);
 
         if (target.result.os.tag == .windows)
             cli.addCSourceFiles(.{ .root = libgit_root, .files = &cli_win32_sources })
@@ -355,7 +354,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         exe.addIncludePath(libgit_src.path("include"));
-        addTlsHeaders(exe, tls_dep, openssl);
+        maybeAddTlsIncludes(exe, tls_dep, tls_backend);
         exe.linkLibrary(lib);
 
         // independent install step so you can easily access the binary
@@ -385,7 +384,7 @@ pub fn build(b: *std.Build) !void {
         tests.addConfigHeader(features);
         tests.addIncludePath(libgit_src.path("include"));
         tests.addIncludePath(libgit_src.path("src/util"));
-        addTlsHeaders(tests, tls_dep, openssl);
+        maybeAddTlsIncludes(tests, tls_dep, tls_backend);
 
         tests.linkLibrary(lib);
 
@@ -394,10 +393,20 @@ pub fn build(b: *std.Build) !void {
     }
 }
 
-fn addTlsHeaders(compile: *std.Build.Step.Compile, tls_dep: ?*std.Build.Dependency, openssl_or_mbedtls: bool) void {
-    if (tls_dep) |tls| compile.addIncludePath(
-        tls.artifact(if (openssl_or_mbedtls) "openssl" else "mbedtls").getEmittedIncludeTree(),
-    );
+const TlsBackend = enum { openssl, mbedtls };
+
+fn maybeAddTlsIncludes(
+    compile: *std.Build.Step.Compile,
+    dep: ?*std.Build.Dependency,
+    backend: TlsBackend,
+) void {
+    if (dep) |tls| {
+        const name = switch (backend) {
+            .openssl => "openssl",
+            .mbedtls => "mbedtls",
+        };
+        compile.addIncludePath(tls.artifact(name).getEmittedIncludeTree());
+    }
 }
 
 const libgit_sources = [_][]const u8{

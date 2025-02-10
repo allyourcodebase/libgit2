@@ -263,6 +263,7 @@ pub fn build(b: *std.Build) !void {
 
         lib.addIncludePath(libgit_src.path("deps/zlib"));
         lib.linkLibrary(zlib);
+        features.addValues(.{ .GIT_COMPRESSION_ZLIB = 1 });
     }
     // xdiff
     {

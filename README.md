@@ -7,8 +7,10 @@ All other dependencies are bundled in the source tree and compiled statically.
 
 ## Usage
 Update your `build.zig.zon`:
-```
-zig fetch --save https://github.com/allyourcodebase/libgit2/archive/refs/tags/v1.8.1.tar.gz
+```sh
+zig fetch --save git+https://github.com/allyourcodebase/libgit2
+# or if you want a tagged release
+zig fetch --save https://github.com/allyourcodebase/libgit2/archive/refs/tags/${tag}.tar.gz
 ```
 
 Then, in your `build.zig`, you can access the library as a dependency:

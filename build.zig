@@ -438,13 +438,16 @@ pub fn build(b: *std.Build) !void {
             top_level_step: *std.Build.Step,
             runner: *std.Build.Step.Compile,
 
+            const ClarStep = @import("ClarTestStep.zig");
+
             fn addTest(
                 self: @This(),
                 name: []const u8,
                 args: []const []const u8,
             ) void {
-                const run = self.addTestInner(name);
-                run.addArgs(args);
+                const clar = ClarStep.create(self.b, name, self.runner);
+                self.top_level_step.dependOn(&clar.step);
+                clar.addArgs(args);
             }
 
             fn addTestFiltered(
@@ -453,28 +456,12 @@ pub fn build(b: *std.Build) !void {
                 /// Comma seperated list of tests
                 tests: []const u8,
             ) void {
-                const run = self.addTestInner(name);
+                const clar = ClarStep.create(self.b, name, self.runner);
+                self.top_level_step.dependOn(&clar.step);
                 var iter = std.mem.tokenizeScalar(u8, tests, ',');
                 while (iter.next()) |filter| {
-                    run.addArg(self.b.fmt("-s{s}", .{filter}));
+                    clar.addArg(self.b.fmt("-s{s}", .{filter}));
                 }
-            }
-
-            fn addTestInner(self: @This(), name: []const u8) *std.Build.Step.Run {
-                const run = self.b.addRunArtifact(self.runner);
-                run.setName(name);
-                run.addArg("-q"); // only report tests that had an error
-                // @Todo parse TAP output from Clar test runner and report errors that way.
-                // @Cleanup this is a very brittle way of reporting errors from the test runner
-                run.expectStdOutEqual(
-                    \\Loaded 384 suites: 
-                    \\Started (test status codes: OK='.' FAILURE='F' SKIPPED='S')
-                    \\
-                    \\
-                    \\
-                );
-                self.top_level_step.dependOn(&run.step);
-                return run;
             }
         };
 

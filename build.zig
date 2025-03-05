@@ -7,11 +7,14 @@ pub fn build(b: *std.Build) !void {
     const libgit_src = b.dependency("libgit2", .{});
     const libgit_root = libgit_src.path(".");
 
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "git2",
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
     });
 
     const features = b.addConfigHeader(
@@ -110,11 +113,14 @@ pub fn build(b: *std.Build) !void {
 
         // ntlmclient
         {
-            const ntlm = b.addStaticLibrary(.{
+            const ntlm = b.addLibrary(.{
                 .name = "ntlmclient",
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
+                .linkage = .static,
+                .root_module = b.createModule(.{
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                }),
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
             maybeAddTlsIncludes(ntlm, tls_dep, tls_backend);
@@ -184,11 +190,14 @@ pub fn build(b: *std.Build) !void {
 
     // Bundled dependencies
     {
-        const llhttp = b.addStaticLibrary(.{
+        const llhttp = b.addLibrary(.{
             .name = "llhttp",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .linkage = .static,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
         llhttp.addIncludePath(libgit_src.path("deps/llhttp"));
         llhttp.addCSourceFiles(.{
@@ -202,11 +211,14 @@ pub fn build(b: *std.Build) !void {
         features.addValues(.{ .GIT_HTTPPARSER_BUILTIN = 1 });
     }
     {
-        const pcre = b.addStaticLibrary(.{
+        const pcre = b.addLibrary(.{
             .name = "pcre",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .linkage = .static,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
         pcre.root_module.addConfigHeader(b.addConfigHeader(
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre/config.h.in") } },
@@ -240,11 +252,14 @@ pub fn build(b: *std.Build) !void {
     }
     {
         // @Todo: support using system zlib?
-        const zlib = b.addStaticLibrary(.{
+        const zlib = b.addLibrary(.{
             .name = "z",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .linkage = .static,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
         zlib.addIncludePath(libgit_src.path("deps/zlib"));
         zlib.addCSourceFiles(.{
@@ -301,13 +316,14 @@ pub fn build(b: *std.Build) !void {
     {
         const cli = b.addExecutable(.{
             .name = "git2_cli",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
 
         cli.addConfigHeader(features);
-        cli.addIncludePath(libgit_src.path("include"));
         cli.addIncludePath(libgit_src.path("src/util"));
         cli.addIncludePath(libgit_src.path("src/cli"));
         maybeAddTlsIncludes(cli, tls_dep, tls_backend);
@@ -341,9 +357,11 @@ pub fn build(b: *std.Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "lg2",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
 
         exe.addIncludePath(libgit_src.path("examples"));
@@ -356,7 +374,6 @@ pub fn build(b: *std.Build) !void {
             },
         });
 
-        exe.addIncludePath(libgit_src.path("include"));
         maybeAddTlsIncludes(exe, tls_dep, tls_backend);
         exe.linkLibrary(lib);
 
@@ -385,7 +402,6 @@ pub fn build(b: *std.Build) !void {
         tests.root_module.addOptions("fixture", fixture);
 
         tests.addConfigHeader(features);
-        tests.addIncludePath(libgit_src.path("include"));
         tests.addIncludePath(libgit_src.path("src/util"));
         maybeAddTlsIncludes(tests, tls_dep, tls_backend);
 

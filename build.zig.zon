@@ -1,20 +1,22 @@
 .{
-    .name = "libgit2",
+    .name = .libgit2,
     .version = "1.9.0",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0x7f0051374dea2cba,
     .dependencies = .{
         .libgit2 = .{
             .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.9.0.tar.gz",
-            .hash = "1220c7c470d6933d22e96211e85a4d7bab5748bcda3ee5adbc10603b8b1803043987",
+            .hash = "N-V-__8AAJbmLwHHxHDWkz0i6WIR6FpNe6tXSLzaPuWtvBBg",
         },
         .openssl = .{
             .url = "https://github.com/allyourcodebase/openssl/archive/refs/tags/3.3.1-1.tar.gz",
-            .hash = "12207c40cefa38fe90e4230dfba2e5c76b37e1ee36602512cad8ff0501f892002a65",
+            .hash = "openssl-3.3.1-1-AAAAACi3ZAB8QM76OP6Q5CMN-6Llx2s34e42YCUSytj_",
             .lazy = true,
         },
         .mbedtls = .{
-            .url = "https://github.com/allyourcodebase/mbedtls/archive/40a2c1126b45f87d19b256229620bc2995637e5a.tar.gz",
-            .hash = "122034bd019496a4e20a775116c53ef05e3247e9a98436b3407d4c0503fa3a16cd42",
+            // @Temporary waiting for patch to be upstreamed (https://github.com/allyourcodebase/mbedtls/pull/2)
+            .url = "git+https://github.com/Parzival-3141/mbedtls#b9ec01cbaf29e19f8fc3b40e541bd86a6878027f",
+            .hash = "mbedtls-3.6.2-E4NURzYUAABWLBwHJWx_ppb_j2kDSoGfCfR2rI2zs9dz",
             .lazy = true,
         },
     },

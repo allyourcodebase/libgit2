@@ -176,7 +176,8 @@ const TapParser = struct {
             // Failure parsing
             .desc => {
                 const name_start = skip(line, keyword.spacer1, keyword.not_ok.len) orelse @panic("expected spacer");
-                try p.wip_failure.description.appendSlice(step_arena, line[name_start..]);
+                const name = std.mem.trim(u8, line[name_start..], &std.ascii.whitespace);
+                try p.wip_failure.description.appendSlice(step_arena, name);
                 try p.wip_failure.description.appendSlice(step_arena, ": ");
                 p.state = .yaml_start;
             },
@@ -198,14 +199,15 @@ const TapParser = struct {
             },
             .file => {
                 const file_start = skip(line, keyword.file, 0) orelse @panic("expected file");
-                const file = std.mem.trim(u8, line[file_start..], &.{'\''});
+                const file = std.mem.trim(u8, line[file_start..], std.ascii.whitespace ++ "'");
                 try p.wip_failure.description.appendSlice(step_arena, file);
                 try p.wip_failure.description.append(step_arena, ':');
                 p.state = .line;
             },
             .line => {
                 const line_start = skip(line, keyword.line, 0) orelse @panic("expected line");
-                try p.wip_failure.description.appendSlice(step_arena, line[line_start..]);
+                const fail_line = std.mem.trim(u8, line[line_start..], &std.ascii.whitespace);
+                try p.wip_failure.description.appendSlice(step_arena, fail_line);
                 p.state = .start;
                 return .{ .failure = p.wip_failure };
             },

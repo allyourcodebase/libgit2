@@ -1,4 +1,4 @@
-//! Runs a Clar test and parses it's [TAP](https://testanything.org/) stream,
+//! Runs a Clar test and lightly parses it's [TAP](https://testanything.org/) stream,
 //! reporting progress/errors to the build system.
 // Based on Step.Run
 
@@ -77,27 +77,39 @@ fn make(step: *Step, options: std.Build.Step.MakeOptions) !void {
         const fifo = poller.fifo(.stdout);
         const r = fifo.reader();
 
-        var buf: [1024]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        const w = fbs.writer();
+        var buf: std.BoundedArray(u8, 1024) = .{};
+        const w = buf.writer();
 
-        var parser: FailureParser = .default;
+        var parser: TapParser = .default;
+        var node: ?std.Progress.Node = null;
+        defer if (node) |n| n.end();
+
         while (true) {
             r.streamUntilDelimiter(w, '\n', null) catch |err| switch (err) {
                 error.EndOfStream => if (try poller.poll()) continue else break,
                 else => return err,
             };
 
-            const line = fbs.getWritten();
-            defer fbs.reset();
+            const line = buf.constSlice();
+            defer buf.resize(0) catch unreachable;
 
-            options.progress_node.completeOne();
-
-            if (try parser.parseLine(arena, line)) |err| {
-                try step.addError("{s}: {s}:{s}", .{ err.desc, err.file, err.line });
-                try step.result_error_msgs.appendSlice(arena, b.dupeStrings(err.reasons.items));
-                try step.result_error_msgs.append(arena, "\n");
-                parser.reset(arena);
+            switch (try parser.parseLine(arena, line)) {
+                .start_suite => |suite| {
+                    if (node) |n| n.end();
+                    node = options.progress_node.start(suite, 0);
+                },
+                .ok => {
+                    if (node) |n| n.completeOne();
+                },
+                .failure => |fail| {
+                    // @Cleanup print failures in a nicer way. Avoid redundant "error:" prefixes on newlines with minimal allocations.
+                    try step.result_error_msgs.append(arena, fail.description.items);
+                    try step.result_error_msgs.appendSlice(arena, fail.reasons.items);
+                    try step.result_error_msgs.append(arena, "\n");
+                    if (node) |n| n.completeOne();
+                    parser.reset();
+                },
+                .feed_line => {},
             }
         }
 
@@ -108,24 +120,34 @@ fn make(step: *Step, options: std.Build.Step.MakeOptions) !void {
     try step.writeManifestAndWatch(&man);
 }
 
-const FailureParser = struct {
+const TapParser = struct {
     state: State,
-    fail: Failure,
+    wip_failure: Result.Failure,
 
-    const Failure = struct {
-        desc: []const u8,
-        reasons: std.ArrayListUnmanaged([]const u8),
-        file: []const u8,
-        line: []const u8,
+    const Result = union(enum) {
+        start_suite: []const u8,
+        ok,
+        failure: Failure,
+        feed_line,
+
+        const Failure = struct {
+            description: std.ArrayListUnmanaged(u8),
+            reasons: std.ArrayListUnmanaged([]const u8),
+        };
     };
 
-    const not_ok = "not ok ";
-    const spacer = " - ";
-    const yaml_blk = " ---";
-    const pre_reason = "reason: |";
-    const at = "at:";
-    const file = "file: ";
-    const _line = "line: ";
+    const keyword = struct {
+        const suite_start = "# start of suite ";
+        const ok = "ok ";
+        const not_ok = "not ok ";
+        const spacer1 = " - ";
+        const spacer2 = ": ";
+        const yaml_blk = " ---";
+        const pre_reason = "reason: |";
+        const at = "at:";
+        const file = "file: ";
+        const line = "line: ";
+    };
 
     const State = enum {
         start,
@@ -137,68 +159,75 @@ const FailureParser = struct {
         line,
     };
 
-    fn parseLine(p: *FailureParser, allocator: Allocator, line: []const u8) Allocator.Error!?Failure {
+    fn parseLine(p: *TapParser, step_arena: Allocator, line: []const u8) Allocator.Error!Result {
         loop: switch (p.state) {
             .start => {
-                if (std.mem.startsWith(u8, line, not_ok)) {
-                    @branchHint(.unlikely);
+                if (std.mem.startsWith(u8, line, keyword.suite_start)) {
+                    const suite_start = skip(line, keyword.spacer2, keyword.suite_start.len) orelse @panic("expected suite number");
+                    return .{ .start_suite = line[suite_start..] };
+                } else if (std.mem.startsWith(u8, line, keyword.ok)) {
+                    return .ok;
+                } else if (std.mem.startsWith(u8, line, keyword.not_ok)) {
                     p.state = .desc;
                     continue :loop p.state;
                 }
             },
+
+            // Failure parsing
             .desc => {
-                const name_start = spacer.len + (std.mem.indexOfPos(u8, line, not_ok.len, spacer) orelse @panic("expected spacer"));
-                p.fail.desc = try allocator.dupe(u8, line[name_start..]);
+                const name_start = skip(line, keyword.spacer1, keyword.not_ok.len) orelse @panic("expected spacer");
+                try p.wip_failure.description.appendSlice(step_arena, line[name_start..]);
+                try p.wip_failure.description.appendSlice(step_arena, ": ");
                 p.state = .yaml_start;
             },
             .yaml_start => {
-                _ = std.mem.indexOf(u8, line, yaml_blk) orelse @panic("expected yaml_blk");
+                _ = std.mem.indexOf(u8, line, keyword.yaml_blk) orelse @panic("expected yaml_blk");
                 p.state = .pre_reason;
             },
             .pre_reason => {
-                _ = std.mem.indexOf(u8, line, pre_reason) orelse @panic("expected pre_reason");
+                _ = std.mem.indexOf(u8, line, keyword.pre_reason) orelse @panic("expected pre_reason");
                 p.state = .reason;
             },
             .reason => {
-                if (std.mem.indexOf(u8, line, at) != null) {
+                if (std.mem.indexOf(u8, line, keyword.at) != null) {
                     p.state = .file;
                 } else {
                     const ln = std.mem.trim(u8, line, &std.ascii.whitespace);
-                    try p.fail.reasons.append(allocator, try allocator.dupe(u8, ln));
+                    try p.wip_failure.reasons.append(step_arena, try step_arena.dupe(u8, ln));
                 }
             },
             .file => {
-                const file_start = file.len + (std.mem.indexOf(u8, line, file) orelse @panic("expected file"));
-                p.fail.file = try allocator.dupe(u8, std.mem.trim(u8, line[file_start..], &.{'\''}));
+                const file_start = skip(line, keyword.file, 0) orelse @panic("expected file");
+                const file = std.mem.trim(u8, line[file_start..], &.{'\''});
+                try p.wip_failure.description.appendSlice(step_arena, file);
+                try p.wip_failure.description.append(step_arena, ':');
                 p.state = .line;
             },
             .line => {
-                const line_start = _line.len + (std.mem.indexOf(u8, line, _line) orelse @panic("expected line"));
-                p.fail.line = try allocator.dupe(u8, line[line_start..]);
+                const line_start = skip(line, keyword.line, 0) orelse @panic("expected line");
+                try p.wip_failure.description.appendSlice(step_arena, line[line_start..]);
                 p.state = .start;
-                return p.fail;
+                return .{ .failure = p.wip_failure };
             },
         }
 
-        return null;
+        return .feed_line;
     }
 
-    const default: FailureParser = .{
+    fn skip(line: []const u8, to_skip: []const u8, start: usize) ?usize {
+        const index = std.mem.indexOfPos(u8, line, start, to_skip) orelse return null;
+        return to_skip.len + index;
+    }
+
+    const default: TapParser = .{
         .state = .start,
-        .fail = .{
-            .desc = undefined,
-            .reasons = .{},
-            .file = undefined,
-            .line = undefined,
+        .wip_failure = .{
+            .description = .empty,
+            .reasons = .empty,
         },
     };
 
-    fn reset(p: *FailureParser, allocator: Allocator) void {
-        for (p.fail.reasons.items) |reason| allocator.free(reason);
-        p.fail.reasons.deinit(allocator);
-        allocator.free(p.fail.desc);
-        allocator.free(p.fail.file);
-        allocator.free(p.fail.line);
+    fn reset(p: *TapParser) void {
         p.* = default;
     }
 };

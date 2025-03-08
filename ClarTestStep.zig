@@ -33,7 +33,7 @@ pub fn addArgs(clar: *ClarTestStep, args: []const []const u8) void {
     for (args) |arg| clar.addArg(arg);
 }
 
-fn make(step: *Step, options: std.Build.Step.MakeOptions) !void {
+fn make(step: *Step, options: Step.MakeOptions) !void {
     const clar: *ClarTestStep = @fieldParentPtr("step", step);
     const b = step.owner;
     const arena = b.allocator;
@@ -41,7 +41,7 @@ fn make(step: *Step, options: std.Build.Step.MakeOptions) !void {
     var man = b.graph.cache.obtain();
     defer man.deinit();
 
-    var argv_list = std.ArrayList([]const u8).init(arena);
+    var argv_list: std.ArrayList([]const u8) = .init(arena);
     {
         const file_path = clar.runner.installed_path orelse clar.runner.generated_bin.?.path.?;
         try argv_list.append(file_path);
@@ -60,7 +60,7 @@ fn make(step: *Step, options: std.Build.Step.MakeOptions) !void {
     }
 
     {
-        var child = std.process.Child.init(argv_list.items, arena);
+        var child: std.process.Child = .init(argv_list.items, arena);
         child.stdin_behavior = .Ignore;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Ignore;
@@ -162,12 +162,12 @@ const TapParser = struct {
     fn parseLine(p: *TapParser, step_arena: Allocator, line: []const u8) Allocator.Error!Result {
         loop: switch (p.state) {
             .start => {
-                if (std.mem.startsWith(u8, line, keyword.suite_start)) {
+                if (mem.startsWith(u8, line, keyword.suite_start)) {
                     const suite_start = skip(line, keyword.spacer2, keyword.suite_start.len) orelse @panic("expected suite number");
                     return .{ .start_suite = line[suite_start..] };
-                } else if (std.mem.startsWith(u8, line, keyword.ok)) {
+                } else if (mem.startsWith(u8, line, keyword.ok)) {
                     return .ok;
-                } else if (std.mem.startsWith(u8, line, keyword.not_ok)) {
+                } else if (mem.startsWith(u8, line, keyword.not_ok)) {
                     p.state = .desc;
                     continue :loop p.state;
                 }
@@ -176,37 +176,37 @@ const TapParser = struct {
             // Failure parsing
             .desc => {
                 const name_start = skip(line, keyword.spacer1, keyword.not_ok.len) orelse @panic("expected spacer");
-                const name = std.mem.trim(u8, line[name_start..], &std.ascii.whitespace);
+                const name = mem.trim(u8, line[name_start..], &std.ascii.whitespace);
                 try p.wip_failure.description.appendSlice(step_arena, name);
                 try p.wip_failure.description.appendSlice(step_arena, ": ");
                 p.state = .yaml_start;
             },
             .yaml_start => {
-                _ = std.mem.indexOf(u8, line, keyword.yaml_blk) orelse @panic("expected yaml_blk");
+                _ = mem.indexOf(u8, line, keyword.yaml_blk) orelse @panic("expected yaml_blk");
                 p.state = .pre_reason;
             },
             .pre_reason => {
-                _ = std.mem.indexOf(u8, line, keyword.pre_reason) orelse @panic("expected pre_reason");
+                _ = mem.indexOf(u8, line, keyword.pre_reason) orelse @panic("expected pre_reason");
                 p.state = .reason;
             },
             .reason => {
-                if (std.mem.indexOf(u8, line, keyword.at) != null) {
+                if (mem.indexOf(u8, line, keyword.at) != null) {
                     p.state = .file;
                 } else {
-                    const ln = std.mem.trim(u8, line, &std.ascii.whitespace);
+                    const ln = mem.trim(u8, line, &std.ascii.whitespace);
                     try p.wip_failure.reasons.append(step_arena, try step_arena.dupe(u8, ln));
                 }
             },
             .file => {
                 const file_start = skip(line, keyword.file, 0) orelse @panic("expected file");
-                const file = std.mem.trim(u8, line[file_start..], std.ascii.whitespace ++ "'");
+                const file = mem.trim(u8, line[file_start..], std.ascii.whitespace ++ "'");
                 try p.wip_failure.description.appendSlice(step_arena, file);
                 try p.wip_failure.description.append(step_arena, ':');
                 p.state = .line;
             },
             .line => {
                 const line_start = skip(line, keyword.line, 0) orelse @panic("expected line");
-                const fail_line = std.mem.trim(u8, line[line_start..], &std.ascii.whitespace);
+                const fail_line = mem.trim(u8, line[line_start..], &std.ascii.whitespace);
                 try p.wip_failure.description.appendSlice(step_arena, fail_line);
                 p.state = .start;
                 return .{ .failure = p.wip_failure };
@@ -217,7 +217,7 @@ const TapParser = struct {
     }
 
     fn skip(line: []const u8, to_skip: []const u8, start: usize) ?usize {
-        const index = std.mem.indexOfPos(u8, line, start, to_skip) orelse return null;
+        const index = mem.indexOfPos(u8, line, start, to_skip) orelse return null;
         return to_skip.len + index;
     }
 
@@ -235,5 +235,6 @@ const TapParser = struct {
 };
 
 const std = @import("std");
+const mem = std.mem;
 const Step = std.Build.Step;
-const Allocator = std.mem.Allocator;
+const Allocator = mem.Allocator;

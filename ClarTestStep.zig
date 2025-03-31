@@ -63,7 +63,7 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
         var child: std.process.Child = .init(argv_list.items, arena);
         child.stdin_behavior = .Ignore;
         child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
+        child.stderr_behavior = .Inherit;
 
         try child.spawn();
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -22,26 +23,36 @@ pub fn build(b: *std.Build) !void {
         .{
             .GIT_THREADS = 1,
             .GIT_USE_NSEC = 1,
-            .GIT_RAND_GETLOADAVG = 1,
         },
     );
 
-    // TODO: are there more subtleties for other platforms?
-    // TODO: do we need iconv on other platforms? original cmake enabled it by
+    // @Cleanup: all these platform and TLS variants are starting to become unweildly. Compress these codepaths to avoid edgecases.
+
+    // @Todo: are there more subtleties for other platforms?
+    // @Todo: do we need iconv on other platforms? original cmake enabled it by
     // default on APPLE targets
-    if (target.result.os.tag == .macos) {
-        lib.linkSystemLibrary("iconv");
-        features.addValues(.{
-            .GIT_USE_ICONV = 1,
-            .GIT_USE_STAT_MTIMESPEC = 1,
-            .GIT_REGEX_REGCOMP_L = 1,
-            .GIT_QSORT_BSD = 1,
-        });
-    } else {
-        features.addValues(.{
-            .GIT_USE_STAT_MTIM = 1,
-            .GIT_RAND_GETENTROPY = 1,
-        });
+    switch (target.result.os.tag) {
+        .macos => {
+            lib.linkSystemLibrary("iconv");
+            features.addValues(.{
+                .GIT_USE_ICONV = 1,
+                .GIT_USE_STAT_MTIMESPEC = 1,
+                .GIT_REGEX_REGCOMP_L = 1,
+                .GIT_QSORT_BSD = 1,
+            });
+        },
+        .windows => {
+            features.addValues(.{
+                .GIT_QSORT_MSC = 1,
+            });
+        },
+        else => {
+            features.addValues(.{
+                .GIT_USE_STAT_MTIM = 1,
+                .GIT_RAND_GETENTROPY = 1,
+                .GIT_RAND_GETLOADAVG = 1,
+            });
+        },
     }
 
     const flags = [_][]const u8{
@@ -419,8 +430,7 @@ pub fn build(b: *std.Build) !void {
 
     const test_step = b.step("test", "Run core unit tests (requires python)");
     {
-        if (@import("builtin").os.tag != .windows) {
-
+        if (builtin.os.tag != .windows) {
             // Fix the test fixture file permissions. This is necessary because Zig does
             // not respect the execute permission on arbitrary files it extracts from dependencies.
             // Since we need those files to have the execute permission set for tests to
@@ -452,7 +462,7 @@ pub fn build(b: *std.Build) !void {
             .name = "libgit2_tests",
             .root_module = b.createModule(.{
                 .target = target,
-                .optimize = .ReleaseSafe,
+                .optimize = .Debug,
                 .link_libc = true,
             }),
         });
@@ -477,7 +487,8 @@ pub fn build(b: *std.Build) !void {
             .flags = &.{
                 b.fmt(
                     "-DCLAR_FIXTURE_PATH=\"{s}\"",
-                    .{libgit_src.path("tests/resources").getPath2(b, &runner.step)}, // @Cleanup
+                    // clar expects the fixture path to only have posix seperators or else some tests will break on windows
+                    .{try getNormalizedPath(libgit_src.path("tests/resources"), b, &runner.step)},
                 ),
                 "-DCLAR_TMPDIR=\"libgit2_tests\"",
                 "-DCLAR_WIN32_LONGPATHS",
@@ -540,6 +551,18 @@ pub fn build(b: *std.Build) !void {
             helper.addTest("ssh", &.{ "-sonline::push", "-sonline::clone::ssh_cert", "-sonline::clone::ssh_with_paths", "-sonline::clone::path_whitespace_ssh", "-sonline::clone::ssh_auth_methods" });
         }
     }
+}
+
+/// Returns the absolute lazy path with posix seperators
+fn getNormalizedPath(lp: std.Build.LazyPath, b: *std.Build, asking_step: *std.Build.Step) ![]const u8 {
+    const p = lp.getPath3(b, asking_step);
+    const result = b.pathResolve(&.{ p.root_dir.path orelse ".", p.sub_path });
+    if (builtin.os.tag == .windows) {
+        for (result) |*c| {
+            if (c.* == '\\') c.* = '/';
+        }
+    }
+    return result;
 }
 
 pub const TlsBackend = enum { openssl, mbedtls, securetransport };

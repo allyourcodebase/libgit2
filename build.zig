@@ -448,7 +448,7 @@ pub fn build(b: *std.Build) !void {
                     .mode = .read_write,
                 });
                 defer file.close();
-                file.setPermissions(.{ .inner = .{ .mode = 0o755 } });
+                try file.setPermissions(.{ .inner = .{ .mode = 0o755 } });
             }
         }
 

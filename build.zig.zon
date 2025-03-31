@@ -9,13 +9,12 @@
             .hash = "N-V-__8AAJbmLwHHxHDWkz0i6WIR6FpNe6tXSLzaPuWtvBBg",
         },
         .openssl = .{
-            .url = "https://github.com/allyourcodebase/openssl/archive/refs/tags/3.3.1-1.tar.gz",
-            .hash = "openssl-3.3.1-1-AAAAACi3ZAB8QM76OP6Q5CMN-6Llx2s34e42YCUSytj_",
+            .url = "git+https://github.com/allyourcodebase/openssl.git#f348124c5382bcc377f1b3277357cbf2ed2fb8db",
+            .hash = "openssl-3.3.1-2-TC9C3Se3ZACF5WO_CjoD7Bt_X94oCsAAbbwhOp1rTZBe",
             .lazy = true,
         },
         .mbedtls = .{
-            // @Temporary waiting for patch to be upstreamed (https://github.com/allyourcodebase/mbedtls/pull/2)
-            .url = "git+https://github.com/Parzival-3141/mbedtls#b9ec01cbaf29e19f8fc3b40e541bd86a6878027f",
+            .url = "git+https://github.com/allyourcodebase/mbedtls#7d862fe61ff2eac37ee54e1e017fc287bed1cd7a",
             .hash = "mbedtls-3.6.2-E4NURzYUAABWLBwHJWx_ppb_j2kDSoGfCfR2rI2zs9dz",
             .lazy = true,
         },

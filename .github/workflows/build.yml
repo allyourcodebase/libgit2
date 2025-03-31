@@ -17,7 +17,7 @@ jobs:
         zig-version: ["0.14.0"]
         os:
           - ubuntu-latest
-          # - macos-latest # Does not build yet
+          - macos-latest
           # - windows-latest # Does not pass tests
     runs-on: ${{ matrix.os }}
     steps:

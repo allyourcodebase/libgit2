@@ -21,14 +21,28 @@ pub fn build(b: *std.Build) !void {
         .{ .style = .{ .cmake = libgit_src.path("src/util/git2_features.h.in") } },
         .{
             .GIT_THREADS = 1,
-
-            // @Todo: add per target conditionals for these
             .GIT_USE_NSEC = 1,
-            .GIT_USE_STAT_MTIM = 1,
-            .GIT_RAND_GETENTROPY = 1,
             .GIT_RAND_GETLOADAVG = 1,
         },
     );
+
+    // TODO: are there more subtleties for other platforms?
+    // TODO: do we need iconv on other platforms? original cmake enabled it by
+    // default on APPLE targets
+    if (target.result.os.tag == .macos) {
+        lib.linkSystemLibrary("iconv");
+        features.addValues(.{
+            .GIT_USE_ICONV = 1,
+            .GIT_USE_STAT_MTIMESPEC = 1,
+            .GIT_REGEX_REGCOMP_L = 1,
+            .GIT_QSORT_BSD = 1,
+        });
+    } else {
+        features.addValues(.{
+            .GIT_USE_STAT_MTIM = 1,
+            .GIT_RAND_GETENTROPY = 1,
+        });
+    }
 
     const flags = [_][]const u8{
         // @Todo: for some reason on linux, trying to use c90 as specified in the cmake
@@ -45,11 +59,11 @@ pub fn build(b: *std.Build) !void {
 
     // The TLS backend logic is only run for non windows builds.
     var tls_dep: ?*std.Build.Dependency = null;
-    const tls_backend = b.option(
+    const tls_backend: TlsBackend = b.option(
         TlsBackend,
         "tls-backend",
         "Choose Unix TLS/SSL backend (default is mbedtls)",
-    ) orelse .mbedtls;
+    ) orelse if (target.result.os.tag == .macos) .securetransport else .mbedtls;
 
     if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary("winhttp");
@@ -73,6 +87,21 @@ pub fn build(b: *std.Build) !void {
         lib.addCSourceFiles(.{ .root = libgit_root, .files = &util_win32_sources, .flags = &flags });
     } else {
         switch (tls_backend) {
+            .securetransport => {
+                lib.linkFramework("Security");
+                lib.linkFramework("CoreFoundation");
+                features.addValues(.{
+                    .GIT_HTTPS = 1,
+                    .GIT_SECURE_TRANSPORT = 1,
+
+                    .GIT_SHA1_COLLISIONDETECT = 1,
+                    .GIT_SHA256_COMMON_CRYPTO = 1,
+
+                    .GIT_USE_FUTIMENS = 1,
+                    .GIT_IO_POLL = 1,
+                    .GIT_IO_SELECT = 1,
+                });
+            },
             .openssl => {
                 tls_dep = b.lazyDependency("openssl", .{
                     .target = target,
@@ -132,20 +161,22 @@ pub fn build(b: *std.Build) !void {
                 switch (tls_backend) {
                     .openssl => "-DCRYPT_OPENSSL",
                     .mbedtls => "-DCRYPT_MBEDTLS",
+                    .securetransport => "-DCRYPT_COMMONCRYPTO",
                 },
             };
-            ntlm.addCSourceFiles(.{
-                .root = libgit_root,
-                .files = &ntlm_sources,
-                .flags = &ntlm_cflags,
-            });
             ntlm.addCSourceFiles(.{
                 .root = libgit_root,
                 .files = switch (tls_backend) {
                     .openssl => &.{"deps/ntlmclient/crypt_openssl.c"},
                     .mbedtls => &.{"deps/ntlmclient/crypt_mbedtls.c"},
+                    .securetransport => &.{"deps/ntlmclient/crypt_commoncrypto.c"},
                 },
                 .flags = &ntlm_cflags,
+            });
+            ntlm.addCSourceFiles(.{
+                .root = libgit_root,
+                .files = &ntlm_sources,
+                .flags = &(ntlm_cflags ++ .{"-Wno-deprecated"}),
             });
 
             lib.linkLibrary(ntlm);
@@ -163,6 +194,7 @@ pub fn build(b: *std.Build) !void {
             .files = switch (tls_backend) {
                 .openssl => &.{"src/util/hash/openssl.c"},
                 .mbedtls => &.{"src/util/hash/mbedtls.c"},
+                .securetransport => &.{"src/util/hash/common_crypto.c"},
             },
             .flags = &flags,
         });
@@ -210,7 +242,7 @@ pub fn build(b: *std.Build) !void {
         lib.linkLibrary(llhttp);
         features.addValues(.{ .GIT_HTTPPARSER_BUILTIN = 1 });
     }
-    {
+    if (target.result.os.tag != .macos) {
         const pcre = b.addLibrary(.{
             .name = "pcre",
             .linkage = .static,
@@ -297,8 +329,6 @@ pub fn build(b: *std.Build) !void {
         64 => features.addValues(.{ .GIT_ARCH_64 = 1 }),
         else => |size| std.debug.panic("Unsupported architecture ({d}bit)", .{size}),
     }
-
-    // @Todo: ICONV?
 
     lib.addConfigHeader(features);
 
@@ -409,7 +439,7 @@ pub fn build(b: *std.Build) !void {
             try file.setPermissions(.{ .inner = .{ .mode = 0o755 } });
         }
 
-        const gen_cmd = b.addSystemCommand(&.{"python"});
+        const gen_cmd = b.addSystemCommand(&.{"python3"});
         gen_cmd.addFileArg(libgit_src.path("tests/clar/generate.py"));
         const clar_suite = gen_cmd.addPrefixedOutputDirectoryArg("-o", "clar_suite");
         gen_cmd.addArgs(&.{ "-f", "-xonline", "-xstress", "-xperf" });
@@ -509,7 +539,7 @@ pub fn build(b: *std.Build) !void {
     }
 }
 
-const TlsBackend = enum { openssl, mbedtls };
+pub const TlsBackend = enum { openssl, mbedtls, securetransport };
 
 fn maybeAddTlsIncludes(
     compile: *std.Build.Step.Compile,
@@ -518,6 +548,7 @@ fn maybeAddTlsIncludes(
 ) void {
     if (dep) |tls| {
         const name = switch (backend) {
+            .securetransport => unreachable,
             .openssl => "openssl",
             .mbedtls => "mbedtls",
         };

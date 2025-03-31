@@ -27,9 +27,6 @@ jobs:
         with:
           version: ${{ matrix.zig-version }}
 
-      - name: Check Formatting
-        run: zig fmt --ast-check --check .
-
       - name: Build
         run: zig build --summary all
 

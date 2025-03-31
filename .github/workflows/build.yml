@@ -15,10 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         zig-version: ["0.14.0"]
-        os:
-          - ubuntu-latest
-          - macos-latest
-          # - windows-latest # Does not pass tests
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

@@ -389,6 +389,26 @@ pub fn build(b: *std.Build) !void {
 
     const test_step = b.step("test", "Run core unit tests (requires python)");
     {
+        // Fix the test fixture file permissions. This is necessary because Zig does
+        // not respect the execute permission on arbitrary files it extracts from dependencies.
+        // Since we need those files to have the execute permission set for tests to
+        // run successfully, we need to patch them before we bake them into the
+        // test executable. While modifying the global cache is hacky, it wont break
+        // hashes for the same reason above.
+        for ([_]std.Build.LazyPath{
+            libgit_root.path(b, "tests/resources/filemodes/exec_on"),
+            libgit_root.path(b, "tests/resources/filemodes/exec_off2on_staged"),
+            libgit_root.path(b, "tests/resources/filemodes/exec_off2on_workdir"),
+            libgit_root.path(b, "tests/resources/filemodes/exec_on_untracked"),
+        }) |lazy| {
+            const path = lazy.getPath2(b, null);
+            const file = try std.fs.cwd().openFile(path, .{
+                .mode = .read_write,
+            });
+            defer file.close();
+            try file.setPermissions(.{ .inner = .{ .mode = 0o755 } });
+        }
+
         const gen_cmd = b.addSystemCommand(&.{"python"});
         gen_cmd.addFileArg(libgit_src.path("tests/clar/generate.py"));
         const clar_suite = gen_cmd.addPrefixedOutputDirectoryArg("-o", "clar_suite");

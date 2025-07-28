@@ -1,7 +1,7 @@
 .{
     .name = .libgit2,
     .version = "1.9.0",
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.15.0-dev.1262+e12dc4947",
     .fingerprint = 0x7f0051374dea2cba,
     .dependencies = .{
         .libgit2 = .{
@@ -14,8 +14,8 @@
             .lazy = true,
         },
         .mbedtls = .{
-            .url = "git+https://github.com/allyourcodebase/mbedtls#7d862fe61ff2eac37ee54e1e017fc287bed1cd7a",
-            .hash = "mbedtls-3.6.2-E4NURzYUAABWLBwHJWx_ppb_j2kDSoGfCfR2rI2zs9dz",
+            .url = "git+https://github.com/dasimmet/mbedtls.git#6f66ef4eee5fece2b9bf676b8d53e13de36f2151",
+            .hash = "mbedtls-3.6.4-E4NUR8QUAADIsIWJKRmTnmiCKS3bPdbBg2mubW4y7OsH",
             .lazy = true,
         },
     },

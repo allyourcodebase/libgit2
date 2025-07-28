@@ -74,26 +74,22 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
         );
         defer poller.deinit();
 
-        const fifo = poller.fifo(.stdout);
-        const r = fifo.reader();
-
-        var buf: std.BoundedArray(u8, 1024) = .{};
-        const w = buf.writer();
+        const r: *std.io.Reader = poller.reader(.stdout);
+        var buf: [1024]u8 = undefined;
+        var w: std.io.Writer = .fixed(&buf);
 
         var parser: TapParser = .default;
         var node: ?std.Progress.Node = null;
         defer if (node) |n| n.end();
 
-        while (true) {
-            r.streamUntilDelimiter(w, '\n', null) catch |err| switch (err) {
-                error.EndOfStream => if (try poller.poll()) continue else break,
+        while (try poller.poll()) {
+            _ = r.streamDelimiter(&w, '\n') catch |err| switch (err) {
+                error.EndOfStream => continue,
                 else => return err,
             };
+            defer _ = w.consumeAll();
 
-            const line = buf.constSlice();
-            defer buf.resize(0) catch unreachable;
-
-            switch (try parser.parseLine(arena, line)) {
+            switch (try parser.parseLine(arena, w.buffered())) {
                 .start_suite => |suite| {
                     if (node) |n| n.end();
                     node = options.progress_node.start(suite, 0);

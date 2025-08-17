@@ -4,7 +4,7 @@
 
 step: Step,
 runner: *Step.Compile,
-args: std.ArrayListUnmanaged([]const u8),
+args: std.ArrayList([]const u8),
 
 const ClarTestStep = @This();
 
@@ -41,15 +41,15 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
     var man = b.graph.cache.obtain();
     defer man.deinit();
 
-    var argv_list: std.ArrayList([]const u8) = .init(arena);
+    var argv_list: std.ArrayList([]const u8) = .empty;
     {
         const file_path = clar.runner.installed_path orelse clar.runner.generated_bin.?.path.?;
-        try argv_list.append(file_path);
+        try argv_list.append(arena, file_path);
         _ = try man.addFile(file_path, null);
     }
-    try argv_list.append("-t"); // force TAP output
+    try argv_list.append(arena, "-t"); // force TAP output
     for (clar.args.items) |arg| {
-        try argv_list.append(arg);
+        try argv_list.append(arena, arg);
         man.hash.addBytes(arg);
     }
 
@@ -127,8 +127,8 @@ const TapParser = struct {
         feed_line,
 
         const Failure = struct {
-            description: std.ArrayListUnmanaged(u8),
-            reasons: std.ArrayListUnmanaged([]const u8),
+            description: std.ArrayList(u8),
+            reasons: std.ArrayList([]const u8),
         };
     };
 

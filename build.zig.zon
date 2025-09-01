@@ -21,7 +21,7 @@
     },
     .paths = .{
         "build.zig",
-        "ClarTestStep.zig",
+        "build",
         "build.zig.zon",
         "README.md",
         "LICENSE",

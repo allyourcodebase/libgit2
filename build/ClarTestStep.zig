@@ -41,15 +41,15 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
     var man = b.graph.cache.obtain();
     defer man.deinit();
 
-    var argv_list: std.ArrayList([]const u8) = .init(arena);
+    var argv_list: std.ArrayList([]const u8) = .empty;
     {
         const file_path = clar.runner.installed_path orelse clar.runner.generated_bin.?.path.?;
-        try argv_list.append(file_path);
+        try argv_list.append(arena, file_path);
         _ = try man.addFile(file_path, null);
     }
-    try argv_list.append("-t"); // force TAP output
+    try argv_list.append(arena, "-t"); // force TAP output
     for (clar.args.items) |arg| {
-        try argv_list.append(arg);
+        try argv_list.append(arena, arg);
         man.hash.addBytes(arg);
     }
 
@@ -67,32 +67,15 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
 
         try child.spawn();
 
-        var poller = std.io.poll(
-            b.allocator,
-            enum { stdout },
-            .{ .stdout = child.stdout.? },
-        );
-        defer poller.deinit();
-
-        const fifo = poller.fifo(.stdout);
-        const r = fifo.reader();
-
-        var buf: std.BoundedArray(u8, 1024) = .{};
-        const w = buf.writer();
+        var reader_buf: [1024]u8 = undefined;
+        var file_reader = child.stdout.?.readerStreaming(&reader_buf);
+        const r = &file_reader.interface;
 
         var parser: TapParser = .default;
         var node: ?std.Progress.Node = null;
         defer if (node) |n| n.end();
 
-        while (true) {
-            r.streamUntilDelimiter(w, '\n', null) catch |err| switch (err) {
-                error.EndOfStream => if (try poller.poll()) continue else break,
-                else => return err,
-            };
-
-            const line = buf.constSlice();
-            defer buf.resize(0) catch unreachable;
-
+        while (r.takeDelimiterExclusive('\n')) |line| {
             switch (try parser.parseLine(arena, line)) {
                 .start_suite => |suite| {
                     if (node) |n| n.end();
@@ -111,6 +94,10 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
                 },
                 .feed_line => {},
             }
+        } else |err| switch (err) {
+            error.EndOfStream => {}, // @Todo: parse ending line to ensure the stream didn't end early
+            error.ReadFailed => return file_reader.err.?,
+            else => return err,
         }
 
         const term = try child.wait();
@@ -131,8 +118,8 @@ const TapParser = struct {
         feed_line,
 
         const Failure = struct {
-            description: std.ArrayListUnmanaged(u8),
-            reasons: std.ArrayListUnmanaged([]const u8),
+            description: std.ArrayList(u8),
+            reasons: std.ArrayList([]const u8),
         };
     };
 

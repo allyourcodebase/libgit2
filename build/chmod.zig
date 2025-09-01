@@ -3,7 +3,7 @@
 //! POSIX only.
 
 pub fn main() !void {
-    const args = std.process.args();
+    var args = std.process.args();
     _ = args.skip();
     while (args.next()) |path| {
         const file = std.fs.cwd().openFile(path, .{ .mode = .read_write }) catch |err|

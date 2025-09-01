@@ -489,7 +489,7 @@ pub fn build(b: *std.Build) !void {
                 // not respect the execute permission on arbitrary files it extracts from dependencies.
                 // Since we need those files to have the execute permission set for tests to
                 // run successfully, we need to patch them before we bake them into the
-                // test executable. -blurrycat 3/31/25
+                // test executable.
                 const resources_dir = b.addWriteFiles().addCopyDirectory(
                     libgit_root.path(b, "tests/resources/"),
                     "test_resources",

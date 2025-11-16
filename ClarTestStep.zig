@@ -41,15 +41,15 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
     var man = b.graph.cache.obtain();
     defer man.deinit();
 
-    var argv_list: std.ArrayList([]const u8) = .init(arena);
+    var argv_list: std.ArrayList([]const u8) = .empty;
     {
         const file_path = clar.runner.installed_path orelse clar.runner.generated_bin.?.path.?;
-        try argv_list.append(file_path);
+        try argv_list.append(arena, file_path);
         _ = try man.addFile(file_path, null);
     }
-    try argv_list.append("-t"); // force TAP output
+    try argv_list.append(arena, "-t"); // force TAP output
     for (clar.args.items) |arg| {
-        try argv_list.append(arg);
+        try argv_list.append(arena, arg);
         man.hash.addBytes(arg);
     }
 
@@ -72,28 +72,26 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
             enum { stdout },
             .{ .stdout = child.stdout.? },
         );
+
         defer poller.deinit();
 
-        const fifo = poller.fifo(.stdout);
-        const r = fifo.reader();
+        const r = poller.reader(.stdout);
+        var buffer: [1024]u8 = undefined;
 
-        var buf: std.BoundedArray(u8, 1024) = .{};
-        const w = buf.writer();
+        const buf_slice: []u8 = buffer[0..];
+        var w: std.io.Writer = .fixed(buf_slice);
 
         var parser: TapParser = .default;
         var node: ?std.Progress.Node = null;
         defer if (node) |n| n.end();
 
         while (true) {
-            r.streamUntilDelimiter(w, '\n', null) catch |err| switch (err) {
+            _ = r.streamDelimiter(&w, '\n') catch |err| switch (err) {
                 error.EndOfStream => if (try poller.poll()) continue else break,
                 else => return err,
             };
 
-            const line = buf.constSlice();
-            defer buf.resize(0) catch unreachable;
-
-            switch (try parser.parseLine(arena, line)) {
+            switch (try parser.parseLine(arena, w.buffer[0..w.end])) {
                 .start_suite => |suite| {
                     if (node) |n| n.end();
                     node = options.progress_node.start(suite, 0);

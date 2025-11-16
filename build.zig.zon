@@ -1,7 +1,7 @@
 .{
     .name = .libgit2,
     .version = "1.9.0",
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.15.1",
     .fingerprint = 0x7f0051374dea2cba,
     .dependencies = .{
         .libgit2 = .{

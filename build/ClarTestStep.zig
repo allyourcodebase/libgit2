@@ -75,8 +75,8 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
         var node: ?std.Progress.Node = null;
         defer if (node) |n| n.end();
 
-        while (r.takeDelimiterExclusive('\n')) |line| {
-            switch (try parser.parseLine(arena, line)) {
+        while (r.takeDelimiter('\n')) |line| {
+            switch (try parser.parseLine(arena, line orelse break)) {
                 .start_suite => |suite| {
                     if (node) |n| n.end();
                     node = options.progress_node.start(suite, 0);
@@ -95,9 +95,8 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
                 .feed_line => {},
             }
         } else |err| switch (err) {
-            error.EndOfStream => {}, // @Todo: parse ending line to ensure the stream didn't end early
             error.ReadFailed => return file_reader.err.?,
-            else => return err,
+            error.StreamTooLong => return error.TapLineTooLong,
         }
 
         const term = try child.wait();

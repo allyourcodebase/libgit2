@@ -7,14 +7,16 @@ pub fn build(b: *std.Build) !void {
     const libgit_src = b.dependency("libgit2", .{});
     const libgit_root = libgit_src.path(".");
 
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "git2",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
+        .root_module = mod,
     });
 
     const features = b.addConfigHeader(
@@ -32,7 +34,7 @@ pub fn build(b: *std.Build) !void {
     // default on APPLE targets
     switch (target.result.os.tag) {
         .macos => {
-            lib.linkSystemLibrary("iconv");
+            mod.linkSystemLibrary("iconv", .{});
             features.addValues(.{
                 .GIT_USE_ICONV = 1,
                 .GIT_USE_STAT_MTIMESPEC = 1,
@@ -76,12 +78,12 @@ pub fn build(b: *std.Build) !void {
     ) orelse if (target.result.os.tag == .macos) .securetransport else .mbedtls;
 
     if (target.result.os.tag == .windows) {
-        lib.linkSystemLibrary("winhttp");
-        lib.linkSystemLibrary("rpcrt4");
-        lib.linkSystemLibrary("crypt32");
-        lib.linkSystemLibrary("ole32");
-        lib.linkSystemLibrary("ws2_32");
-        lib.linkSystemLibrary("secur32");
+        mod.linkSystemLibrary("winhttp", .{});
+        mod.linkSystemLibrary("rpcrt4", .{});
+        mod.linkSystemLibrary("crypt32", .{});
+        mod.linkSystemLibrary("ole32", .{});
+        mod.linkSystemLibrary("ws2_32", .{});
+        mod.linkSystemLibrary("secur32", .{});
 
         features.addValues(.{
             .GIT_HTTPS = 1,
@@ -93,13 +95,17 @@ pub fn build(b: *std.Build) !void {
             .GIT_IO_WSAPOLL = 1,
         });
 
-        lib.addWin32ResourceFile(.{ .file = libgit_src.path("src/libgit2/git2.rc") });
-        lib.addCSourceFiles(.{ .root = libgit_root, .files = &util_win32_sources, .flags = &flags });
+        mod.addWin32ResourceFile(.{ .file = libgit_src.path("src/libgit2/git2.rc") });
+        mod.addCSourceFiles(.{
+            .root = libgit_root,
+            .files = &util_win32_sources,
+            .flags = &flags,
+        });
     } else {
         switch (tls_backend) {
             .securetransport => {
-                lib.linkFramework("Security");
-                lib.linkFramework("CoreFoundation");
+                mod.linkFramework("Security", .{});
+                mod.linkFramework("CoreFoundation", .{});
                 features.addValues(.{
                     .GIT_HTTPS = 1,
                     .GIT_SECURE_TRANSPORT = 1,
@@ -117,7 +123,7 @@ pub fn build(b: *std.Build) !void {
                     .target = target,
                     .optimize = optimize,
                 });
-                if (tls_dep) |tls| lib.linkLibrary(tls.artifact("openssl"));
+                if (tls_dep) |tls| mod.linkLibrary(tls.artifact("openssl"));
                 features.addValues(.{
                     .GIT_HTTPS = 1,
                     .GIT_OPENSSL = 1,
@@ -135,7 +141,7 @@ pub fn build(b: *std.Build) !void {
                     .target = target,
                     .optimize = optimize,
                 });
-                if (tls_dep) |tls| lib.linkLibrary(tls.artifact("mbedtls"));
+                if (tls_dep) |tls| mod.linkLibrary(tls.artifact("mbedtls"));
                 features.addValues(.{
                     .GIT_HTTPS = 1,
                     .GIT_MBEDTLS = 1,
@@ -152,14 +158,10 @@ pub fn build(b: *std.Build) !void {
 
         // ntlmclient
         {
-            const ntlm = b.addLibrary(.{
-                .name = "ntlmclient",
-                .linkage = .static,
-                .root_module = b.createModule(.{
-                    .target = target,
-                    .optimize = optimize,
-                    .link_libc = true,
-                }),
+            const ntlm = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
             });
             ntlm.addIncludePath(libgit_src.path("deps/ntlmclient"));
             maybeAddTlsIncludes(ntlm, tls_dep, tls_backend);
@@ -189,17 +191,21 @@ pub fn build(b: *std.Build) !void {
                 .flags = &(ntlm_cflags ++ .{"-Wno-deprecated"}),
             });
 
-            lib.linkLibrary(ntlm);
-            lib.addAfterIncludePath(libgit_src.path("deps/ntlmclient")); // avoid aliasing ntlmclient/util.h and src/util/util.h
+            mod.linkLibrary(b.addLibrary(.{
+                .name = "ntlmclient",
+                .linkage = .static,
+                .root_module = ntlm,
+            }));
+            mod.addAfterIncludePath(libgit_src.path("deps/ntlmclient")); // avoid aliasing ntlmclient/util.h and src/util/util.h
             features.addValues(.{ .GIT_NTLM = 1 });
         }
 
-        lib.addCSourceFiles(.{
+        mod.addCSourceFiles(.{
             .root = libgit_root,
             .files = &util_unix_sources,
             .flags = &flags,
         });
-        lib.addCSourceFiles(.{
+        mod.addCSourceFiles(.{
             .root = libgit_root,
             .files = switch (tls_backend) {
                 .openssl => &.{"src/util/hash/openssl.c"},
@@ -211,7 +217,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     // SHA1 collisiondetect
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = libgit_root,
         .files = &util_sha1dc_sources,
         .flags = &(flags ++ .{
@@ -222,7 +228,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     if (b.option(bool, "enable-ssh", "Enable SSH support") orelse false) {
-        lib.linkSystemLibrary("ssh2");
+        mod.linkSystemLibrary("ssh2", .{});
         features.addValues(.{
             .GIT_SSH = 1,
             .GIT_SSH_LIBSSH2 = 1,
@@ -232,14 +238,10 @@ pub fn build(b: *std.Build) !void {
 
     // Bundled dependencies
     {
-        const llhttp = b.addLibrary(.{
-            .name = "llhttp",
-            .linkage = .static,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
+        const llhttp = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
         });
         llhttp.addIncludePath(libgit_src.path("deps/llhttp"));
         llhttp.addCSourceFiles(.{
@@ -248,21 +250,21 @@ pub fn build(b: *std.Build) !void {
             .flags = &.{ "-Wno-unused-parameter", "-Wno-missing-declarations" },
         });
 
-        lib.addIncludePath(libgit_src.path("deps/llhttp"));
-        lib.linkLibrary(llhttp);
+        mod.addIncludePath(libgit_src.path("deps/llhttp"));
+        mod.linkLibrary(b.addLibrary(.{
+            .name = "llhttp",
+            .linkage = .static,
+            .root_module = llhttp,
+        }));
         features.addValues(.{ .GIT_HTTPPARSER_BUILTIN = 1 });
     }
     if (target.result.os.tag != .macos) {
-        const pcre = b.addLibrary(.{
-            .name = "pcre",
-            .linkage = .static,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
+        const pcre = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
         });
-        pcre.root_module.addConfigHeader(b.addConfigHeader(
+        pcre.addConfigHeader(b.addConfigHeader(
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre/config.h.in") } },
             .{
                 .SUPPORT_PCRE8 = 1,
@@ -288,20 +290,20 @@ pub fn build(b: *std.Build) !void {
             },
         });
 
-        lib.addIncludePath(libgit_src.path("deps/pcre"));
-        lib.linkLibrary(pcre);
+        mod.addIncludePath(libgit_src.path("deps/pcre"));
+        mod.linkLibrary(b.addLibrary(.{
+            .name = "pcre",
+            .linkage = .static,
+            .root_module = pcre,
+        }));
         features.addValues(.{ .GIT_REGEX_BUILTIN = 1 });
     }
     {
         // @Todo: support using system zlib?
-        const zlib = b.addLibrary(.{
-            .name = "z",
-            .linkage = .static,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
+        const zlib = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
         });
         zlib.addIncludePath(libgit_src.path("deps/zlib"));
         zlib.addCSourceFiles(.{
@@ -318,20 +320,24 @@ pub fn build(b: *std.Build) !void {
             },
         });
 
-        lib.addIncludePath(libgit_src.path("deps/zlib"));
-        lib.linkLibrary(zlib);
+        mod.addIncludePath(libgit_src.path("deps/zlib"));
+        mod.linkLibrary(b.addLibrary(.{
+            .name = "z",
+            .linkage = .static,
+            .root_module = zlib,
+        }));
         features.addValues(.{ .GIT_COMPRESSION_ZLIB = 1 });
     }
     // xdiff
     {
         // Bundled xdiff dependency relies on libgit2 headers & utils, so we
         // just add the source files directly instead of making a static lib step.
-        lib.addCSourceFiles(.{
+        mod.addCSourceFiles(.{
             .root = libgit_root,
             .files = &xdiff_sources,
             .flags = &.{ "-Wno-sign-compare", "-Wno-unused-parameter" },
         });
-        lib.addIncludePath(libgit_src.path("deps/xdiff"));
+        mod.addIncludePath(libgit_src.path("deps/xdiff"));
     }
 
     switch (target.result.ptrBitWidth()) {
@@ -340,27 +346,32 @@ pub fn build(b: *std.Build) !void {
         else => |size| std.debug.panic("Unsupported architecture ({d}bit)", .{size}),
     }
 
-    lib.addConfigHeader(features);
+    mod.addConfigHeader(features);
 
-    lib.addIncludePath(libgit_src.path("src/libgit2"));
-    lib.addIncludePath(libgit_src.path("src/util"));
-    lib.addIncludePath(libgit_src.path("include"));
+    mod.addIncludePath(libgit_src.path("src/libgit2"));
+    mod.addIncludePath(libgit_src.path("src/util"));
+    mod.addIncludePath(libgit_src.path("include"));
 
-    lib.addCSourceFiles(.{ .root = libgit_root, .files = &libgit_sources, .flags = &flags });
-    lib.addCSourceFiles(.{ .root = libgit_root, .files = &util_sources, .flags = &flags });
+    mod.addCSourceFiles(.{
+        .root = libgit_root,
+        .files = &libgit_sources,
+        .flags = &flags,
+    });
+    mod.addCSourceFiles(.{
+        .root = libgit_root,
+        .files = &util_sources,
+        .flags = &flags,
+    });
 
     lib.installHeadersDirectory(libgit_src.path("include"), "", .{});
     b.installArtifact(lib);
 
     const cli_step = b.step("run-cli", "Build and run the command-line interface");
     {
-        const cli = b.addExecutable(.{
-            .name = "git2_cli",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
+        const cli = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
         });
 
         cli.addConfigHeader(features);
@@ -384,8 +395,12 @@ pub fn build(b: *std.Build) !void {
         });
 
         // independent install step so you can easily access the binary
-        const cli_install = b.addInstallArtifact(cli, .{});
-        const cli_run = b.addRunArtifact(cli);
+        const cli_exe = b.addExecutable(.{
+            .name = "git2_cli",
+            .root_module = cli,
+        });
+        const cli_install = b.addInstallArtifact(cli_exe, .{});
+        const cli_run = b.addRunArtifact(cli_exe);
         if (b.args) |args| {
             for (args) |arg| cli_run.addArg(arg);
         }
@@ -395,17 +410,18 @@ pub fn build(b: *std.Build) !void {
 
     const examples_step = b.step("run-example", "Build and run library usage example app");
     {
-        const exe = b.addExecutable(.{
+        const lg2 = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        const lg2_exe = b.addExecutable(.{
             .name = "lg2",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
+            .root_module = lg2,
         });
 
-        exe.addIncludePath(libgit_src.path("examples"));
-        exe.addCSourceFiles(.{
+        lg2.addIncludePath(libgit_src.path("examples"));
+        lg2.addCSourceFiles(.{
             .root = libgit_root,
             .files = &example_sources,
             .flags = &.{
@@ -414,12 +430,12 @@ pub fn build(b: *std.Build) !void {
             },
         });
 
-        maybeAddTlsIncludes(exe, tls_dep, tls_backend);
-        exe.linkLibrary(lib);
+        maybeAddTlsIncludes(lg2, tls_dep, tls_backend);
+        lg2.linkLibrary(lib);
 
         // independent install step so you can easily access the binary
-        const examples_install = b.addInstallArtifact(exe, .{});
-        const example_run = b.addRunArtifact(exe);
+        const examples_install = b.addInstallArtifact(lg2_exe, .{});
+        const example_run = b.addRunArtifact(lg2_exe);
         if (b.args) |args| {
             for (args) |arg| example_run.addArg(arg);
         }
@@ -442,13 +458,14 @@ pub fn build(b: *std.Build) !void {
             .{},
         );
 
-        const runner = b.addExecutable(.{
+        const runner = b.createModule(.{
+            .target = target,
+            .optimize = .Debug,
+            .link_libc = true,
+        });
+        const runner_exe = b.addExecutable(.{
             .name = "libgit2_tests",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = .Debug,
-                .link_libc = true,
-            }),
+            .root_module = runner,
         });
         runner.addIncludePath(clar_suite);
         runner.addIncludePath(clar_src);
@@ -507,7 +524,7 @@ pub fn build(b: *std.Build) !void {
                 run_chmod.addFileArg(resources_dir.path(b, "filemodes/exec_off2on_staged"));
                 run_chmod.addFileArg(resources_dir.path(b, "filemodes/exec_off2on_workdir"));
                 run_chmod.addFileArg(resources_dir.path(b, "filemodes/exec_on_untracked"));
-                runner.step.dependOn(&run_chmod.step);
+                runner_exe.step.dependOn(&run_chmod.step);
 
                 break :dir resources_dir;
             },
@@ -529,7 +546,7 @@ pub fn build(b: *std.Build) !void {
             // run_fix.has_side_effects = true; // @Todo is this necessary? What are the rules for cache invalidation with Run steps?
             run_fix.addFileArg(clar_src.path(b, "clar/fixtures.h"));
             run_fix.addDirectoryArg(resources_dir);
-            runner.step.dependOn(&run_fix.step);
+            runner_exe.step.dependOn(&run_fix.step);
         }
 
         const TestHelper = struct {
@@ -567,7 +584,7 @@ pub fn build(b: *std.Build) !void {
         const helper: TestHelper = .{
             .b = b,
             .top_level_step = test_step,
-            .runner = runner,
+            .runner = runner_exe,
         };
 
         if (b.option([]const u8, "test-filter", "Comma seperated list of specific tests to run")) |tests| {
@@ -591,7 +608,7 @@ pub fn build(b: *std.Build) !void {
 pub const TlsBackend = enum { openssl, mbedtls, securetransport };
 
 fn maybeAddTlsIncludes(
-    compile: *std.Build.Step.Compile,
+    compile: *std.Build.Module,
     dep: ?*std.Build.Dependency,
     backend: TlsBackend,
 ) void {

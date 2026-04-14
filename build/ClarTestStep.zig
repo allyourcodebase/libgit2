@@ -18,7 +18,7 @@ pub fn create(owner: *std.Build, name: []const u8, runner: *Step.Compile) *ClarT
             .makeFn = make,
         }),
         .runner = runner,
-        .args = .{},
+        .args = .empty,
     };
     runner.getEmittedBin().addStepDependencies(&clar.step);
     return clar;
@@ -60,15 +60,17 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
     }
 
     {
-        var child: std.process.Child = .init(argv_list.items, arena);
-        child.stdin_behavior = .Ignore;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Inherit;
-
-        try child.spawn();
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
+        var child = try std.process.spawn(io, .{
+            .argv = argv_list.items,
+            .stdin = .ignore,
+            .stdout = .pipe,
+            .stderr = .inherit,
+        });
 
         var reader_buf: [1024]u8 = undefined;
-        var file_reader = child.stdout.?.readerStreaming(&reader_buf);
+        var file_reader = child.stdout.?.readerStreaming(io, &reader_buf);
         const r = &file_reader.interface;
 
         var parser: TapParser = .default;
@@ -99,8 +101,8 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
             error.StreamTooLong => return error.TapLineTooLong,
         }
 
-        const term = try child.wait();
-        try step.handleChildProcessTerm(term, null, argv_list.items);
+        const term = try child.wait(io);
+        try step.handleChildProcessTerm(term);
     }
 
     try step.writeManifestAndWatch(&man);

@@ -2,31 +2,38 @@
 //! reporting progress/errors to the build system.
 // Based on Step.Run
 
-step: Step,
-runner: *Step.Compile,
-args: std.ArrayListUnmanaged([]const u8),
+step: *Step,
+run: *Step.Run,
+parse: *Step.Run,
 
 const ClarTestStep = @This();
 
 pub fn create(owner: *std.Build, name: []const u8, runner: *Step.Compile) *ClarTestStep {
     const clar = owner.allocator.create(ClarTestStep) catch @panic("OOM");
-    clar.* = .{
-        .step = Step.init(.{
-            .id = .custom,
-            .name = name,
-            .owner = owner,
-            .makeFn = make,
+    const run = owner.addRunArtifact(runner);
+    run.setName(owner.fmt("run-{s}", .{name}));
+
+    const parse = owner.addRunArtifact(owner.addExecutable(.{
+        .name = "clar-parser",
+        .root_module = owner.createModule(.{
+            .root_source_file = owner.path("build/ClarParser.zig"),
+            .target = owner.graph.host,
+            .optimize = .ReleaseSafe,
         }),
-        .runner = runner,
-        .args = .empty,
+    }));
+    parse.setName(owner.fmt("parse-{s}", .{name}));
+    parse.addFileArg(run.captureStdOut(.{}));
+
+    clar.* = .{
+        .step = &parse.step,
+        .run = run,
+        .parse = parse,
     };
-    runner.getEmittedBin().addStepDependencies(&clar.step);
     return clar;
 }
 
 pub fn addArg(clar: *ClarTestStep, arg: []const u8) void {
-    const b = clar.step.owner;
-    clar.args.append(b.allocator, b.dupe(arg)) catch @panic("OOM");
+    clar.run.addArg(arg);
 }
 
 pub fn addArgs(clar: *ClarTestStep, args: []const []const u8) void {
@@ -60,15 +67,15 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
     }
 
     {
-        var child = try std.process.spawn(b.graph.io, .{
-            .argv = argv_list.items,
-            .stdin = .close,
-            .stdout = .pipe,
-            .stderr = .inherit,
-        });
+        var child: std.process.Child = .init(argv_list.items, arena);
+        child.stdin_behavior = .Ignore;
+        child.stdout_behavior = .Pipe;
+        child.stderr_behavior = .Inherit;
+
+        try child.spawn();
 
         var reader_buf: [1024]u8 = undefined;
-        var file_reader = child.stdout.?.readerStreaming(b.graph.io, &reader_buf);
+        var file_reader = child.stdout.?.readerStreaming(&reader_buf);
         const r = &file_reader.interface;
 
         var parser: TapParser = .default;
@@ -99,8 +106,8 @@ fn make(step: *Step, options: Step.MakeOptions) !void {
             error.StreamTooLong => return error.TapLineTooLong,
         }
 
-        const term = try child.wait(b.graph.io);
-        try step.handleChildProcessTerm(term);
+        const term = try child.wait();
+        try step.handleChildProcessTerm(term, null, argv_list.items);
     }
 
     try step.writeManifestAndWatch(&man);

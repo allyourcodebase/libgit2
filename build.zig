@@ -543,7 +543,6 @@ pub fn build(b: *std.Build) !void {
             });
 
             const run_fix = b.addRunArtifact(clar_fix);
-            // run_fix.has_side_effects = true; // @Todo is this necessary? What are the rules for cache invalidation with Run steps?
             run_fix.addFileArg(clar_src.path(b, "clar/fixtures.h"));
             run_fix.addDirectoryArg(resources_dir);
             runner_exe.step.dependOn(&run_fix.step);
@@ -553,7 +552,6 @@ pub fn build(b: *std.Build) !void {
             b: *std.Build,
             top_level_step: *std.Build.Step,
             runner: *std.Build.Step.Compile,
-
             const ClarStep = @import("build/ClarTestStep.zig");
 
             fn addTest(
@@ -562,7 +560,7 @@ pub fn build(b: *std.Build) !void {
                 args: []const []const u8,
             ) void {
                 const clar = ClarStep.create(self.b, name, self.runner);
-                self.top_level_step.dependOn(&clar.step);
+                self.top_level_step.dependOn(clar.step);
                 clar.addArgs(args);
             }
 
@@ -573,7 +571,7 @@ pub fn build(b: *std.Build) !void {
                 tests: []const u8,
             ) void {
                 const clar = ClarStep.create(self.b, name, self.runner);
-                self.top_level_step.dependOn(&clar.step);
+                self.top_level_step.dependOn(clar.step);
                 var iter = std.mem.tokenizeScalar(u8, tests, ',');
                 while (iter.next()) |filter| {
                     clar.addArg(self.b.fmt("-s{s}", .{filter}));

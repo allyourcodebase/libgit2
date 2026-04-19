@@ -10,7 +10,7 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const arena = init.arena.allocator();
 
-    var args = init.minimal.args.iterate();
+    var args = try init.minimal.args.iterateAllocator(arena);
     _ = args.skip();
 
     const clar_fixture_h = args.next() orelse fatal("expected path to 'clar/fixtures.h' file", .{});

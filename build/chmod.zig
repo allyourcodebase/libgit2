@@ -4,7 +4,9 @@
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    var args = init.minimal.args.iterate();
+    const arena = init.arena.allocator();
+
+    var args = try init.minimal.args.iterateAllocator(arena);
     _ = args.skip();
     while (args.next()) |path| {
         const file = std.Io.Dir.cwd().openFile(

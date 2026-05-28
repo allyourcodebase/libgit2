@@ -12,6 +12,7 @@ pub fn create(owner: *std.Build, name: []const u8, runner: *Step.Compile) *ClarT
     const clar = owner.allocator.create(ClarTestStep) catch @panic("OOM");
     const run = owner.addRunArtifact(runner);
     run.setName(owner.fmt("run-{s}", .{name}));
+    run.addArg("-t");
 
     const parse = owner.addRunArtifact(owner.addExecutable(.{
         .name = "clar-parser",

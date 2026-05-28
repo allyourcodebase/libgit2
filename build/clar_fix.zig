@@ -63,7 +63,7 @@ pub fn main(init: std.process.Init) !void {
 
     var writer = file.writer(io, &buf); // buf is safe to reuse since file_reader is out of scope
     try writer.interface.writeAll(src.items);
-    try writer.interface.flush();
+    try writer.end();
 }
 
 fn fatal(comptime fmt: []const u8, args: anytype) noreturn {

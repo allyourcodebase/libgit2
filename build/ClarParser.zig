@@ -7,6 +7,10 @@ pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const cwd = std.Io.Dir.cwd();
     const args = try init.minimal.args.toSlice(arena);
+    if (args.len != 2) {
+        std.log.err("expected exactly one argument, but received: {d}", .{args.len});
+        return error.InvalidArgs;
+    }
     const input = try cwd.openFile(io, args[1], .{});
     defer input.close(io);
 

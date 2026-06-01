@@ -401,9 +401,8 @@ pub fn build(b: *std.Build) !void {
         });
         const cli_install = b.addInstallArtifact(cli_exe, .{});
         const cli_run = b.addRunArtifact(cli_exe);
-        if (b.args) |args| {
-            for (args) |arg| cli_run.addArg(arg);
-        }
+
+        passthroughArgs(b, cli_run);
         cli_run.step.dependOn(&cli_install.step);
         cli_step.dependOn(&cli_run.step);
     }
@@ -436,9 +435,7 @@ pub fn build(b: *std.Build) !void {
         // independent install step so you can easily access the binary
         const examples_install = b.addInstallArtifact(lg2_exe, .{});
         const example_run = b.addRunArtifact(lg2_exe);
-        if (b.args) |args| {
-            for (args) |arg| example_run.addArg(arg);
-        }
+        passthroughArgs(b, example_run);
         example_run.step.dependOn(&examples_install.step);
         examples_step.dependOn(&example_run.step);
     }
@@ -599,6 +596,17 @@ pub fn build(b: *std.Build) !void {
             helper.addTest("online_customcert", &.{"-sonline::customcert"});
             helper.addTest("proxy", &.{"-sonline::clone::proxy"});
             helper.addTest("ssh", &.{ "-sonline::push", "-sonline::clone::ssh_cert", "-sonline::clone::ssh_with_paths", "-sonline::clone::path_whitespace_ssh", "-sonline::clone::ssh_auth_methods" });
+        }
+    }
+}
+
+// zig 0.17.0 and 0.16.0 compatible args passthrough function
+inline fn passthroughArgs(b: *std.Build, run: *std.Build.Step.Run) void {
+    if (comptime @import("builtin").zig_version.order(std.SemanticVersion.parse("0.16.0") catch unreachable) == .gt) {
+        run.addPassthruArgs();
+    } else {
+        if (b.args) |args| {
+            for (args) |arg| run.addArg(arg);
         }
     }
 }

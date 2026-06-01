@@ -22,12 +22,14 @@ pub fn main(init: std.process.Init) !void {
     var errors: std.ArrayList([]const u8) = .empty;
 
     var suite: ?[]const u8 = null;
+    var error_found: bool = false;
     while (r.takeDelimiter('\n')) |line| {
         switch (try parser.parseLine(arena, line orelse break)) {
             .start_suite => |s| {
                 if (suite) |last_suite| {
-                    try check_errors(io, errors.items, last_suite);
-                    suite = null;
+                    if (try check_errors(io, errors.items, last_suite)) {
+                        error_found = true;
+                    }
                     errors.clearRetainingCapacity();
                 }
                 suite = s;
@@ -47,10 +49,13 @@ pub fn main(init: std.process.Init) !void {
         error.StreamTooLong => return error.TapLineTooLong,
     }
 
-    try check_errors(io, errors.items, suite);
+    if (try check_errors(io, errors.items, suite)) {
+        error_found = true;
+    }
+    if (error_found) std.process.exit(1);
 }
 
-pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) !void {
+pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) !bool {
     if (errors.len > 0) {
         const stderr = std.Io.File.stderr();
         var stderr_buf: [1024]u8 = undefined;
@@ -60,8 +65,9 @@ pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) 
             try stderr_writer.interface.writeAll(err);
         }
         try stderr_writer.flush();
-        std.process.exit(1);
+        return true;
     }
+    return false;
 }
 
 const TapParser = struct {

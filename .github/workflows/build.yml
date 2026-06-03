@@ -14,9 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        zig-version: ["0.15.2"]
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        
+        zig-version: [ "0.16.0" ]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

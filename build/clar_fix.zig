@@ -6,12 +6,11 @@ const std = @import("std");
 
 const fixture_var_name = "CLAR_FIXTURE_PATH";
 
-pub fn main() !void {
-    var arena_inst: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
-    defer arena_inst.deinit();
-    const arena = arena_inst.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const arena = init.arena.allocator();
 
-    var args = try std.process.argsWithAllocator(arena);
+    var args = try init.minimal.args.iterateAllocator(arena);
     _ = args.skip();
 
     const clar_fixture_h = args.next() orelse fatal("expected path to 'clar/fixtures.h' file", .{});
@@ -20,8 +19,11 @@ pub fn main() !void {
 
         var cleaned_path: std.ArrayList(u8) = try .initCapacity(arena, std.fs.max_path_bytes + 2);
         cleaned_path.appendAssumeCapacity('"'); // add string quotes
-        const abs_path = try std.fs.cwd().realpath(path_arg, cleaned_path.unusedCapacitySlice());
-        cleaned_path.items.len += abs_path.len;
+        const rec_dir = try std.Io.Dir.cwd().openDir(io, path_arg, .{});
+        defer rec_dir.close(io);
+
+        const abs_path_len = try rec_dir.realPath(io, cleaned_path.unusedCapacitySlice());
+        cleaned_path.items.len += abs_path_len;
         cleaned_path.appendAssumeCapacity('"');
 
         // clar expects the fixture path to only have posix seperators or else some tests will break
@@ -31,12 +33,16 @@ pub fn main() !void {
         break :blk cleaned_path.items;
     };
 
-    const file = try std.fs.cwd().openFile(clar_fixture_h, .{ .mode = .read_write });
-    defer file.close();
+    const file = try std.Io.Dir.cwd().openFile(
+        io,
+        clar_fixture_h,
+        .{ .mode = .read_write },
+    );
+    defer file.close(io);
 
     var buf: [1024]u8 = undefined;
     var src: std.ArrayList(u8) = src: {
-        var file_reader = file.reader(&buf);
+        var file_reader = file.reader(io, &buf);
 
         const file_size = try file_reader.getSize();
         const to_add = fixture_path.len -| fixture_var_name.len;
@@ -55,10 +61,9 @@ pub fn main() !void {
     const start = i + "return fixture_path(".len;
     src.replaceRangeAssumeCapacity(start, fixture_var_name.len, fixture_path);
 
-    try file.seekTo(0);
-    var writer = file.writer(&buf); // buf is safe to reuse since file_reader is out of scope
+    var writer = file.writer(io, &buf); // buf is safe to reuse since file_reader is out of scope
     try writer.interface.writeAll(src.items);
-    try writer.interface.flush();
+    try writer.end();
 }
 
 fn fatal(comptime fmt: []const u8, args: anytype) noreturn {

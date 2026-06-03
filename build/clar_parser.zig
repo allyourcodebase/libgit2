@@ -1,21 +1,35 @@
+//! Runs a Clar test and lightly parses it's [TAP](https://testanything.org/) stream,
+//! reporting progress/errors to the build system.
+// @Todo report progress/errors to the build system
+
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
-pub fn main(init: std.process.Init) !void {
+pub fn main(init: std.process.Init) !u8 {
     const io = init.io;
     const arena = init.arena.allocator();
-    const cwd = std.Io.Dir.cwd();
-    const args = try init.minimal.args.toSlice(arena);
-    if (args.len != 2) {
-        std.log.err("expected exactly one argument, but received: {d}", .{args.len});
+    const args = (try init.minimal.args.toSlice(arena))[1..];
+
+    if (args.len < 1) {
+        std.log.err("expected at least one argument", .{});
         return error.InvalidArgs;
     }
-    const input = try cwd.openFile(io, args[1], .{});
-    defer input.close(io);
+
+    var argv_list: std.ArrayList([]const u8) = try .initCapacity(arena, args.len + 1);
+    argv_list.appendAssumeCapacity(args[0]); // test runner executable
+    argv_list.appendAssumeCapacity("-t"); // force TAP output
+    argv_list.appendSliceAssumeCapacity(args[1..]); // test runner args
+
+    var runner = try std.process.spawn(io, .{
+        .argv = argv_list.items,
+        .stdin = .ignore,
+        .stdout = .pipe,
+        .stderr = .inherit,
+    });
 
     var reader_buf: [1024]u8 = undefined;
-    var file_reader = input.readerStreaming(io, &reader_buf);
+    var file_reader = runner.stdout.?.readerStreaming(io, &reader_buf);
     const r = &file_reader.interface;
 
     var parser: TapParser = .default;
@@ -26,17 +40,18 @@ pub fn main(init: std.process.Init) !void {
     while (r.takeDelimiter('\n')) |line| {
         switch (try parser.parseLine(arena, line orelse break)) {
             .start_suite => |s| {
+                // @Todo integrate with build progress nodes instead
                 if (suite) |last_suite| {
                     if (try check_errors(io, errors.items, last_suite)) {
                         error_found = true;
                     }
+                    arena.free(last_suite);
                     errors.clearRetainingCapacity();
                 }
                 suite = s;
             },
             .ok => {},
             .failure => |fail| {
-                // @Cleanup print failures in a nicer way. Avoid redundant "error:" prefixes on newlines with minimal allocations.
                 try errors.append(arena, fail.description.items);
                 try errors.appendSlice(arena, fail.reasons.items);
                 try errors.append(arena, "\n");
@@ -46,13 +61,15 @@ pub fn main(init: std.process.Init) !void {
         }
     } else |err| switch (err) {
         error.ReadFailed => return file_reader.err.?,
-        error.StreamTooLong => return error.TapLineTooLong,
+        error.StreamTooLong => return error.TapLineTooLong, // if you get this error then the reader buffer is too short!
     }
 
+    _ = try runner.wait(io); // @Todo report term?
     if (try check_errors(io, errors.items, suite)) {
         error_found = true;
     }
-    if (error_found) std.process.exit(1);
+
+    return @intFromBool(error_found);
 }
 
 pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) !bool {
@@ -60,9 +77,11 @@ pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) 
         const stderr = std.Io.File.stderr();
         var stderr_buf: [1024]u8 = undefined;
         var stderr_writer = stderr.writerStreaming(io, &stderr_buf);
-        if (suite) |s| try stderr_writer.interface.print("suite: {s}\n", .{s});
+
+        try stderr_writer.interface.print("errors in suite: {?s}\n", .{suite});
         for (errors) |err| {
             try stderr_writer.interface.writeAll(err);
+            try stderr_writer.interface.writeByte('\n');
         }
         try stderr_writer.flush();
         return true;
@@ -109,12 +128,13 @@ const TapParser = struct {
         line,
     };
 
+    /// caller owns any memory allocated in Result (start_suite and failure)
     fn parseLine(p: *TapParser, arena: Allocator, line: []const u8) Allocator.Error!Result {
         loop: switch (p.state) {
             .start => {
                 if (mem.startsWith(u8, line, keyword.suite_start)) {
                     const suite_start = skip(line, keyword.spacer2, keyword.suite_start.len) orelse @panic("expected suite number");
-                    return .{ .start_suite = line[suite_start..] };
+                    return .{ .start_suite = try arena.dupe(u8, line[suite_start..]) };
                 } else if (mem.startsWith(u8, line, keyword.ok)) {
                     return .ok;
                 } else if (mem.startsWith(u8, line, keyword.not_ok)) {

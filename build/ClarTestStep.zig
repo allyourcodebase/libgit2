@@ -1,40 +1,33 @@
-//! Runs a Clar test and lightly parses it's [TAP](https://testanything.org/) stream,
-//! reporting progress/errors to the build system.
-// Based on Step.Run
+//! See clar_parser.zig
 
 step: *Step,
-run: *Step.Run,
-parse: *Step.Run,
+test_and_parse: *Step.Run,
 
 const ClarTestStep = @This();
 
 pub fn create(owner: *std.Build, name: []const u8, runner: *Step.Compile) *ClarTestStep {
     const clar = owner.allocator.create(ClarTestStep) catch @panic("OOM");
-    const run = owner.addRunArtifact(runner);
-    run.setName(owner.fmt("run-{s}", .{name}));
-    run.addArg("-t");
 
-    const parse = owner.addRunArtifact(owner.addExecutable(.{
+    const run = owner.addRunArtifact(owner.addExecutable(.{
         .name = "clar-parser",
         .root_module = owner.createModule(.{
-            .root_source_file = owner.path("build/ClarParser.zig"),
+            .root_source_file = owner.path("build/clar_parser.zig"),
             .target = owner.graph.host,
-            .optimize = .ReleaseSafe,
+            .optimize = .Debug,
         }),
     }));
-    parse.setName(owner.fmt("parse-{s}", .{name}));
-    parse.addFileArg(run.captureStdOut(.{}));
+    run.setName(owner.fmt("test-{s}", .{name}));
+    run.addArtifactArg(runner);
 
     clar.* = .{
-        .step = &parse.step,
-        .run = run,
-        .parse = parse,
+        .step = &run.step,
+        .test_and_parse = run,
     };
     return clar;
 }
 
 pub fn addArg(clar: *ClarTestStep, arg: []const u8) void {
-    clar.run.addArg(arg);
+    clar.test_and_parse.addArg(arg);
 }
 
 pub fn addArgs(clar: *ClarTestStep, args: []const []const u8) void {

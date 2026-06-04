@@ -547,17 +547,17 @@ pub fn build(b: *std.Build) !void {
 
         const TestHelper = struct {
             b: *std.Build,
-            top_level_step: *std.Build.Step,
-            runner: *std.Build.Step.Compile,
-            const ClarStep = @import("build/ClarTestStep.zig");
+            top_level_step: *Step,
+            runner: *Step.Compile,
+            clar_parser: *Step.Compile,
+            const Step = std.Build.Step;
 
             fn addTest(
                 self: @This(),
                 name: []const u8,
                 args: []const []const u8,
             ) void {
-                const clar = ClarStep.create(self.b, name, self.runner);
-                self.top_level_step.dependOn(clar.step);
+                const clar = self.createClarTestStep(name);
                 clar.addArgs(args);
             }
 
@@ -567,12 +567,19 @@ pub fn build(b: *std.Build) !void {
                 /// Comma seperated list of tests
                 tests: []const u8,
             ) void {
-                const clar = ClarStep.create(self.b, name, self.runner);
-                self.top_level_step.dependOn(clar.step);
+                const clar = self.createClarTestStep(name);
                 var iter = std.mem.tokenizeScalar(u8, tests, ',');
                 while (iter.next()) |filter| {
                     clar.addArg(self.b.fmt("-s{s}", .{filter}));
                 }
+            }
+
+            fn createClarTestStep(self: @This(), name: []const u8) *Step.Run {
+                const clar = self.b.addRunArtifact(self.clar_parser);
+                self.top_level_step.dependOn(&clar.step);
+                clar.setName(self.b.fmt("test-{s}", .{name}));
+                clar.addArtifactArg(self.runner);
+                return clar;
             }
         };
 
@@ -580,6 +587,14 @@ pub fn build(b: *std.Build) !void {
             .b = b,
             .top_level_step = test_step,
             .runner = runner_exe,
+            .clar_parser = b.addExecutable(.{
+                .name = "clar-parser",
+                .root_module = b.createModule(.{
+                    .root_source_file = b.path("build/clar_parser.zig"),
+                    .target = b.graph.host,
+                    .optimize = .Debug,
+                }),
+            }),
         };
 
         if (b.option([]const u8, "test-filter", "Comma seperated list of specific tests to run")) |tests| {

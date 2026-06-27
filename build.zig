@@ -366,6 +366,17 @@ pub fn build(b: *std.Build) !void {
     lib.installHeadersDirectory(libgit_src.path("include"), "", .{});
     b.installArtifact(lib);
 
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = libgit_src.path("include/git2.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    translate_c.addIncludePath(libgit_src.path("include"));
+
+    const git2_module = translate_c.addModule("git2");
+    git2_module.linkLibrary(lib);
+
     const cli_step = b.step("run-cli", "Build and run the command-line interface");
     {
         const cli = b.createModule(.{

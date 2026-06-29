@@ -14,21 +14,13 @@ zig fetch --save https://github.com/allyourcodebase/libgit2/archive/refs/tags/${
 
 Then, in your `build.zig`, you can access the library as a dependency:
 ```zig
-const exe = b.addExecutable(.{
-    .name = "git2test",
-    .root_module = b.createModule(.{
-        .root_source_file = b.path("main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ // Add git2 as an import
-            .name = "git2",
-            .module = dep.module("git2"),
-        }},
-    }),
+const libgit2_dep = b.dependency("libgit2", .{
+    .target = target,
+    .optimize = optimize,
+    .@"enable-ssh" = true, // optional ssh support via libssh2
+    .@"tls-backend" = .openssl, // use openssl instead of mbedtls
 });
-```
-
-Don't forget to import headers too:
-```zig
-const c = @import("git2");
+your_compile_step.root_module.addImport("git2", libgit_dep.module("git2"));
+// or if you only need the artifact:
+your_compile_step.linkLibrary(libgit_dep.artifact("git2"));
 ```

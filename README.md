@@ -20,12 +20,7 @@ const libgit2_dep = b.dependency("libgit2", .{
     .@"enable-ssh" = true, // optional ssh support via libssh2
     .@"tls-backend" = .openssl, // use openssl instead of mbedtls
 });
+your_compile_step.root_module.addImport("git2", libgit_dep.module("git2"));
+// or if you only need the artifact:
 your_compile_step.linkLibrary(libgit_dep.artifact("git2"));
-```
-
-Don't forget to import headers too:
-```zig
-const c = @cImport({
-    @cInclude("git2.h");
-});
 ```

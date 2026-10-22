@@ -180,7 +180,7 @@ pub fn build(b: *std.Build) !void {
                 .root = libgit_root,
                 .files = switch (tls_backend) {
                     .openssl => &.{"deps/ntlmclient/crypt_openssl.c"},
-                    .mbedtls => &.{"deps/ntlmclient/crypt_mbedtls.c"},
+                    .mbedtls => &.{ "deps/ntlmclient/crypt_mbedtls.c", "deps/ntlmclient/crypt_builtin_md4.c" },
                     .securetransport => &.{"deps/ntlmclient/crypt_commoncrypto.c"},
                 },
                 .flags = &ntlm_cflags,
@@ -915,7 +915,6 @@ const xdiff_sources = [_][]const u8{
 };
 
 const ntlm_sources = [_][]const u8{
-    "deps/ntlmclient/crypt_builtin_md4.c",
     "deps/ntlmclient/ntlm.c",
     "deps/ntlmclient/unicode_builtin.c",
     "deps/ntlmclient/util.c",

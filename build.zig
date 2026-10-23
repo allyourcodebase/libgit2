@@ -119,7 +119,7 @@ pub fn build(b: *std.Build) !void {
                 });
             },
             .openssl => {
-                tls_dep = b.lazyDependency("openssl", .{
+                tls_dep = try b.dependencyLazy("openssl", .{
                     .target = target,
                     .optimize = optimize,
                 });
@@ -137,7 +137,7 @@ pub fn build(b: *std.Build) !void {
                 });
             },
             .mbedtls => {
-                tls_dep = b.lazyDependency("mbedtls", .{
+                tls_dep = try b.dependencyLazy("mbedtls", .{
                     .target = target,
                     .optimize = optimize,
                 });
@@ -451,7 +451,7 @@ pub fn build(b: *std.Build) !void {
         examples_step.dependOn(&example_run.step);
     }
 
-    const test_step = b.step("test", "Run core unit tests (requires python)");
+    const test_step = b.step("test", "Run core unit tests (requires python3)");
     {
         const gen_cmd = b.addSystemCommand(&.{"python3"});
         gen_cmd.addFileArg(libgit_src.path("tests/clar/generate.py"));
@@ -603,13 +603,15 @@ pub fn build(b: *std.Build) !void {
                 .root_module = b.createModule(.{
                     .root_source_file = b.path("build/clar_parser.zig"),
                     .target = b.graph.host,
-                    .optimize = .Debug,
+                    .optimize = .debug,
                 }),
             }),
         };
 
         if (b.option([]const u8, "test-filter", "Comma seperated list of specific tests to run")) |tests| {
             helper.addTestFiltered("filtered", tests);
+        } else if (b.option(bool, "test-offline", "Only run offline tests") orelse false) {
+            helper.addTest("offline", &.{"-xonline"});
         } else {
             helper.addTest("offline", &.{
                 "-xonline",

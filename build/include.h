@@ -1,6 +1,3 @@
-#ifndef INCLUDE_git_include_h__
-#define INCLUDE_git_include_h__
-
 #include "git2.h"
 #include "git2/sys/alloc.h"
 #include "git2/sys/commit_graph.h"
@@ -24,5 +21,3 @@
 #include "git2/sys/refs.h"
 #include "git2/sys/remote.h"
 #include "git2/sys/repository.h"
-
-#endif // INCLUDE_git_include_h__INCLUDED

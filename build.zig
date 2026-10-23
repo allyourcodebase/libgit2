@@ -618,7 +618,15 @@ pub fn build(b: *std.Build) !void {
             helper.addTest("gitdaemon_sha256", &.{"-sonline::clone::sha256"});
             helper.addTest("invasive", &.{ "-sfilter::stream::bigfile", "-sodb::largefiles", "-siterator::workdir::filesystem_gunk", "-srepo::init", "-srepo::init::at_filesystem_root", "-sonline::clone::connect_timeout_default" });
             helper.addTest("offline", &.{"-xonline"});
-            helper.addTest("online", &.{ "-sonline", "-xonline::customcert" });
+            helper.addTest("online", &.{
+                "-sonline",
+                "-xonline::customcert",
+                // These tests are disabled because they try to connect to an outdated bitbucket repository.
+                // See https://github.com/libgit2/libgit2/pull/7326
+                "-xonline::clone::credentials_via_custom_headers",
+                "-xonline::clone::bitbucket_style",
+                "-xonline::clone::bitbucket_uses_creds_in_url",
+            });
             helper.addTest("online_customcert", &.{"-sonline::customcert"});
             helper.addTest("proxy", &.{"-sonline::clone::proxy"});
             helper.addTest("ssh", &.{ "-sonline::push", "-sonline::clone::ssh_cert", "-sonline::clone::ssh_with_paths", "-sonline::clone::path_whitespace_ssh", "-sonline::clone::ssh_auth_methods" });

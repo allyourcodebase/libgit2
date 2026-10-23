@@ -1,10 +1,11 @@
 .{
     .name = .libgit2,
-    .version = "1.9.0",
+    .version = "1.0.0+1.9.0",
     .minimum_zig_version = "0.16.0",
     .fingerprint = 0x7f0051374dea2cba,
     .dependencies = .{
         .libgit2 = .{
+            .version = "1.9.0",
             .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.9.0.tar.gz",
             .hash = "N-V-__8AAJbmLwHHxHDWkz0i6WIR6FpNe6tXSLzaPuWtvBBg",
         },

@@ -455,7 +455,7 @@ pub fn build(b: *std.Build) !void {
         examples_step.dependOn(&example_run.step);
     }
 
-    const test_step = b.step("test", "Run core unit tests (requires python)");
+    const test_step = b.step("test", "Run core unit tests (requires python3)");
     {
         const gen_cmd = b.addSystemCommand(&.{"python3"});
         gen_cmd.addFileArg(libgit_src.path("tests/clar/generate.py"));

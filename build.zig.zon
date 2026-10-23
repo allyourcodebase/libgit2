@@ -18,6 +18,12 @@
             .hash = "mbedtls-3.6.4-E4NUR24VAADBF5pt-No-Z90DjozkzySYAgq6eDFy9Xdy",
             .lazy = true,
         },
+        .libssh2 = .{
+            // TODO: merge https://github.com/allyourcodebase/libssh2/pull/11
+            .url = "git+https://github.com/dasimmet/libssh2?ref=feature/mbedtls-dependency#a593b032a2ac50f60527d55094ea2d8a2b8fda56",
+            .hash = "libssh2-1.11.1-JgdeR1YYAAA0tzOdJeQFzntxhxXv42Hx7M_o7wlJ5rJm",
+            .lazy = true,
+        },
     },
     .paths = .{
         "build.zig",

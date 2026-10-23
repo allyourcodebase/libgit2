@@ -228,7 +228,18 @@ pub fn build(b: *std.Build) !void {
     });
 
     if (b.option(bool, "enable-ssh", "Enable SSH support") orelse false) {
-        mod.linkSystemLibrary("ssh2", .{});
+        if (b.systemIntegrationOption("ssh2", .{})) {
+            mod.linkSystemLibrary("ssh2", .{});
+        } else {
+            if (b.lazyDependency("libssh2", .{
+                .target = target,
+                .optimize = optimize,
+                .@"crypto-backend" = .mbedtls,
+                .@"link-system-crypto-backend" = false,
+            })) |libssh2| {
+                mod.linkLibrary(libssh2.artifact("ssh2"));
+            }
+        }
         features.addValues(.{
             .GIT_SSH = 1,
             .GIT_SSH_LIBSSH2 = 1,

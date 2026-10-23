@@ -367,7 +367,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     const translate_c = b.addTranslateC(.{
-        .root_source_file = libgit_src.path("include/git2.h"),
+        .root_source_file = b.path("build/include.h"),
         .target = target,
         .optimize = optimize,
     });

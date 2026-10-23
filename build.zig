@@ -611,7 +611,10 @@ pub fn build(b: *std.Build) !void {
         if (b.option([]const u8, "test-filter", "Comma seperated list of specific tests to run")) |tests| {
             helper.addTestFiltered("filtered", tests);
         } else {
-            helper.addTest("auth_clone", &.{"-sonline::clone::cred"});
+            helper.addTest("auth_clone", &.{
+                "-sonline::clone::cred",
+                "-xonline::clone::credentials_via_custom_headers", // See comment below
+            });
             helper.addTest("auth_clone_and_push", &.{ "-sonline::clone::push", "-sonline::push" });
             helper.addTest("gitdaemon", &.{"-sonline::push"});
             helper.addTest("gitdaemon_namespace", &.{"-sonline::clone::namespace"});

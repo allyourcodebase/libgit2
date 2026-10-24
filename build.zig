@@ -228,7 +228,19 @@ pub fn build(b: *std.Build) !void {
     });
 
     if (b.option(bool, "enable-ssh", "Enable SSH support") orelse false) {
-        mod.linkSystemLibrary("ssh2", .{});
+        if (b.systemIntegrationOption("ssh2", .{})) {
+            mod.linkSystemLibrary("ssh2", .{});
+        } else {
+            if (b.lazyDependency("libssh2", .{
+                .target = target,
+                .optimize = optimize,
+                .@"crypto-backend" = .mbedtls,
+                .@"link-system-crypto-backend" = false,
+                .zlib = true,
+            })) |libssh2| {
+                mod.linkLibrary(libssh2.artifact("ssh2"));
+            }
+        }
         features.addValues(.{
             .GIT_SSH = 1,
             .GIT_SSH_LIBSSH2 = 1,
@@ -299,33 +311,11 @@ pub fn build(b: *std.Build) !void {
         features.addValues(.{ .GIT_REGEX_BUILTIN = 1 });
     }
     {
-        // @Todo: support using system zlib?
-        const zlib = b.createModule(.{
+        const zlib = b.dependency("zlib", .{
             .target = target,
             .optimize = optimize,
-            .link_libc = true,
         });
-        zlib.addIncludePath(libgit_src.path("deps/zlib"));
-        zlib.addCSourceFiles(.{
-            .root = libgit_root,
-            .files = &zlib_sources,
-            .flags = &.{
-                "-Wno-implicit-fallthrough",
-                "-DNO_VIZ",
-                "-DSTDC",
-                "-DNO_GZIP",
-                "-DHAVE_SYS_TYPES_H",
-                "-DHAVE_STDINT_H",
-                "-DHAVE_STDDEF_H",
-            },
-        });
-
-        mod.addIncludePath(libgit_src.path("deps/zlib"));
-        mod.linkLibrary(b.addLibrary(.{
-            .name = "z",
-            .linkage = .static,
-            .root_module = zlib,
-        }));
+        mod.linkLibrary(zlib.artifact("z"));
         features.addValues(.{ .GIT_COMPRESSION_ZLIB = 1 });
     }
     // xdiff

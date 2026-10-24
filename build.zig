@@ -620,7 +620,15 @@ pub fn build(b: *std.Build) !void {
             helper.addTest("gitdaemon_namespace", &.{"-sonline::clone::namespace"});
             helper.addTest("gitdaemon_sha256", &.{"-sonline::clone::sha256"});
             helper.addTest("invasive", &.{ "-sfilter::stream::bigfile", "-sodb::largefiles", "-siterator::workdir::filesystem_gunk", "-srepo::init", "-srepo::init::at_filesystem_root", "-sonline::clone::connect_timeout_default" });
-            helper.addTest("offline", &.{"-xonline"});
+            helper.addTest("offline", &.{
+                "-xonline",
+                // clone::nonetwork::bad_urls wastes a ton of time waiting for a connection to bogus URLs to timeout.
+                // This can be easily fixed by manually setting the timeout to something reasonable using `git_libgit2_opts(GIT_OPT_SET_SERVER_CONNECT_TIMEOUT, ms);`
+                // Because connect uses an exponential backoff, the test runner is usually sleeping for literal minutes! WTF!
+                // On my machine, setting the timout to 1 second drops the test time from 2 minutes 14 seconds to *1.6 seconds*.
+                // For everyone's sake, disable this test until the timeout is patched.
+                "-xclone::nonetwork::bad_urls",
+            });
             helper.addTest("online", &.{
                 "-sonline",
                 "-xonline::customcert",

@@ -6,7 +6,6 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const libgit_src = b.dependency("libgit2", .{});
-    const libgit_root = libgit_src.path(".");
 
     const mod = b.createModule(.{
         .target = target,
@@ -98,7 +97,7 @@ pub fn build(b: *std.Build) !void {
 
         mod.addWin32ResourceFile(.{ .file = libgit_src.path("src/libgit2/git2.rc") });
         mod.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("src/util"),
             .files = &sources.util_win32,
             .flags = &flags,
         });
@@ -178,16 +177,16 @@ pub fn build(b: *std.Build) !void {
                 },
             };
             ntlm.addCSourceFiles(.{
-                .root = libgit_root,
+                .root = libgit_src.path("deps/ntlmclient"),
                 .files = switch (tls_backend) {
-                    .openssl => &.{"deps/ntlmclient/crypt_openssl.c"},
-                    .mbedtls => &.{ "deps/ntlmclient/crypt_mbedtls.c", "deps/ntlmclient/crypt_builtin_md4.c" },
-                    .securetransport => &.{"deps/ntlmclient/crypt_commoncrypto.c"},
+                    .openssl => &.{"crypt_openssl.c"},
+                    .mbedtls => &.{ "crypt_mbedtls.c", "crypt_builtin_md4.c" },
+                    .securetransport => &.{"crypt_commoncrypto.c"},
                 },
                 .flags = &ntlm_cflags,
             });
             ntlm.addCSourceFiles(.{
-                .root = libgit_root,
+                .root = libgit_src.path("deps/ntlmclient"),
                 .files = &sources.ntlm,
                 .flags = &(ntlm_cflags ++ .{"-Wno-deprecated"}),
             });
@@ -202,16 +201,16 @@ pub fn build(b: *std.Build) !void {
         }
 
         mod.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("src/util"),
             .files = &sources.util_unix,
             .flags = &flags,
         });
         mod.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("src/util"),
             .files = switch (tls_backend) {
-                .openssl => &.{"src/util/hash/openssl.c"},
-                .mbedtls => &.{"src/util/hash/mbedtls.c"},
-                .securetransport => &.{"src/util/hash/common_crypto.c"},
+                .openssl => &.{"hash/openssl.c"},
+                .mbedtls => &.{"hash/mbedtls.c"},
+                .securetransport => &.{"hash/common_crypto.c"},
             },
             .flags = &flags,
         });
@@ -219,7 +218,7 @@ pub fn build(b: *std.Build) !void {
 
     // SHA1 collisiondetect
     mod.addCSourceFiles(.{
-        .root = libgit_root,
+        .root = libgit_src.path("src/util"),
         .files = &sources.util_sha1dc,
         .flags = &(flags ++ .{
             "-DSHA1DC_NO_STANDARD_INCLUDES",
@@ -246,7 +245,7 @@ pub fn build(b: *std.Build) !void {
         });
         llhttp.addIncludePath(libgit_src.path("deps/llhttp"));
         llhttp.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("deps/llhttp"),
             .files = &sources.llhttp,
             .flags = &.{ "-Wno-unused-parameter", "-Wno-missing-declarations" },
         });
@@ -282,7 +281,7 @@ pub fn build(b: *std.Build) !void {
         ));
         pcre.addIncludePath(libgit_src.path("deps/pcre"));
         pcre.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("deps/pcre"),
             .files = &sources.pcre,
             .flags = &.{
                 "-Wno-unused-function",
@@ -308,7 +307,7 @@ pub fn build(b: *std.Build) !void {
         });
         zlib.addIncludePath(libgit_src.path("deps/zlib"));
         zlib.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("deps/zlib"),
             .files = &sources.zlib,
             .flags = &.{
                 "-Wno-implicit-fallthrough",
@@ -334,7 +333,7 @@ pub fn build(b: *std.Build) !void {
         // Bundled xdiff dependency relies on libgit2 headers & utils, so we
         // just add the source files directly instead of making a static lib step.
         mod.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("deps/xdiff"),
             .files = &sources.xdiff,
             .flags = &.{ "-Wno-sign-compare", "-Wno-unused-parameter" },
         });
@@ -354,12 +353,12 @@ pub fn build(b: *std.Build) !void {
     mod.addIncludePath(libgit_src.path("include"));
 
     mod.addCSourceFiles(.{
-        .root = libgit_root,
+        .root = libgit_src.path("src/libgit2"),
         .files = &sources.libgit2,
         .flags = &flags,
     });
     mod.addCSourceFiles(.{
-        .root = libgit_root,
+        .root = libgit_src.path("src/util"),
         .files = &sources.util,
         .flags = &flags,
     });
@@ -393,17 +392,17 @@ pub fn build(b: *std.Build) !void {
 
         cli.linkLibrary(lib);
         cli.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("src/cli"),
             .files = &sources.cli,
             // @Todo: see above
             // .flags = &.{"-std=c90"},
         });
         cli.addCSourceFiles(.{
-            .root = libgit_root,
+            .root = libgit_src.path("src/cli"),
             .files = if (target.result.os.tag == .windows)
-                &.{"src/cli/win32/sighandler.c"}
+                &.{"win32/sighandler.c"}
             else
-                &.{"src/cli/unix/sighandler.c"},
+                &.{"unix/sighandler.c"},
         });
 
         // independent install step so you can easily access the binary
@@ -433,8 +432,8 @@ pub fn build(b: *std.Build) !void {
 
         lg2.addIncludePath(libgit_src.path("examples"));
         lg2.addCSourceFiles(.{
-            .root = libgit_root,
-            .files = &sources.example,
+            .root = libgit_src.path("examples"),
+            .files = &sources.examples,
             .flags = &.{
                 // "-std=c90",
                 "-DGIT_DEPRECATE_HARD",
@@ -498,7 +497,7 @@ pub fn build(b: *std.Build) !void {
             "-DGIT_DEPRECATE_HARD",
         };
         runner.addCSourceFiles(.{
-            .root = libgit_src.path("tests/libgit2/"),
+            .root = libgit_src.path("tests/libgit2"),
             .files = &sources.libgit2_test,
             .flags = runner_flags,
         });
@@ -509,7 +508,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         const resources_dir = switch (@import("builtin").os.tag) {
-            .windows => libgit_src.path("tests/resources/"),
+            .windows => libgit_src.path("tests/resources"),
             else => dir: {
                 // Fix the test fixture file permissions. This is necessary because Zig does
                 // not respect the execute permission on arbitrary files it extracts from dependencies.
@@ -517,7 +516,7 @@ pub fn build(b: *std.Build) !void {
                 // run successfully, we need to patch them before we bake them into the
                 // test executable.
                 const resources_dir = b.addWriteFiles().addCopyDirectory(
-                    libgit_root.path(b, "tests/resources/"),
+                    libgit_src.path("tests/resources/"),
                     "test_resources",
                     .{},
                 );

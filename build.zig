@@ -542,6 +542,10 @@ pub fn build(b: *std.Build) !void {
             // This path isn't known at configure-time, so we have to create a dedicated build step.
             // This step replaces *reads* of the `CLAR_FIXTURE_PATH` macro in a local-cache copy of the source code
             // (see clar_src). Thankfully the macro is only read by `tests/clar/clar/fixture.h` once.
+            //
+            // Additionally fixes a bug in tests/clar/clar.c where the stat type macros can be
+            // mismatched when targeting windows (specifically mingw-w64), causing compile errors on zig 0.17.0.
+            // @Todo remove this patch when updating upstream to 1.9.1 or later
             const clar_fix = b.addExecutable(.{
                 .name = "clar_fix",
                 .root_module = b.createModule(.{
@@ -551,6 +555,7 @@ pub fn build(b: *std.Build) !void {
             });
 
             const run_fix = b.addRunArtifact(clar_fix);
+            run_fix.addFileArg(clar_src.path(b, "clar.c"));
             run_fix.addFileArg(clar_src.path(b, "clar/fixtures.h"));
             run_fix.addDirectoryArg(resources_dir);
             runner_exe.step.dependOn(&run_fix.step);

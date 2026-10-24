@@ -611,15 +611,6 @@ pub fn build(b: *std.Build) !void {
         if (b.option([]const u8, "test-filter", "Comma seperated list of specific tests to run")) |tests| {
             helper.addTestFiltered("filtered", tests);
         } else {
-            helper.addTest("auth_clone", &.{
-                "-sonline::clone::cred",
-                "-xonline::clone::credentials_via_custom_headers", // See comment below
-            });
-            helper.addTest("auth_clone_and_push", &.{ "-sonline::clone::push", "-sonline::push" });
-            helper.addTest("gitdaemon", &.{"-sonline::push"});
-            helper.addTest("gitdaemon_namespace", &.{"-sonline::clone::namespace"});
-            helper.addTest("gitdaemon_sha256", &.{"-sonline::clone::sha256"});
-            helper.addTest("invasive", &.{ "-sfilter::stream::bigfile", "-sodb::largefiles", "-siterator::workdir::filesystem_gunk", "-srepo::init", "-srepo::init::at_filesystem_root", "-sonline::clone::connect_timeout_default" });
             helper.addTest("offline", &.{
                 "-xonline",
                 // clone::nonetwork::bad_urls wastes a ton of time waiting for a connection to bogus URLs to timeout.
@@ -629,18 +620,31 @@ pub fn build(b: *std.Build) !void {
                 // For everyone's sake, disable this test until the timeout is patched.
                 "-xclone::nonetwork::bad_urls",
             });
-            helper.addTest("online", &.{
-                "-sonline",
-                "-xonline::customcert",
-                // These tests are disabled because they try to connect to an outdated bitbucket repository.
-                // See https://github.com/libgit2/libgit2/pull/7326
-                "-xonline::clone::credentials_via_custom_headers",
-                "-xonline::clone::bitbucket_style",
-                "-xonline::clone::bitbucket_uses_creds_in_url",
-            });
-            helper.addTest("online_customcert", &.{"-sonline::customcert"});
-            helper.addTest("proxy", &.{"-sonline::clone::proxy"});
-            helper.addTest("ssh", &.{ "-sonline::push", "-sonline::clone::ssh_cert", "-sonline::clone::ssh_with_paths", "-sonline::clone::path_whitespace_ssh", "-sonline::clone::ssh_auth_methods" });
+
+            const only_offline = b.option(bool, "test-offline", "Only run offline tests") orelse false;
+            if (!only_offline) {
+                helper.addTest("auth_clone", &.{
+                    "-sonline::clone::cred",
+                    "-xonline::clone::credentials_via_custom_headers", // See comment below
+                });
+                helper.addTest("auth_clone_and_push", &.{ "-sonline::clone::push", "-sonline::push" });
+                helper.addTest("gitdaemon", &.{"-sonline::push"});
+                helper.addTest("gitdaemon_namespace", &.{"-sonline::clone::namespace"});
+                helper.addTest("gitdaemon_sha256", &.{"-sonline::clone::sha256"});
+                helper.addTest("invasive", &.{ "-sfilter::stream::bigfile", "-sodb::largefiles", "-siterator::workdir::filesystem_gunk", "-srepo::init", "-srepo::init::at_filesystem_root", "-sonline::clone::connect_timeout_default" });
+                helper.addTest("online", &.{
+                    "-sonline",
+                    "-xonline::customcert",
+                    // These tests are disabled because they try to connect to an outdated bitbucket repository.
+                    // See https://github.com/libgit2/libgit2/pull/7326
+                    "-xonline::clone::credentials_via_custom_headers",
+                    "-xonline::clone::bitbucket_style",
+                    "-xonline::clone::bitbucket_uses_creds_in_url",
+                });
+                helper.addTest("online_customcert", &.{"-sonline::customcert"});
+                helper.addTest("proxy", &.{"-sonline::clone::proxy"});
+                helper.addTest("ssh", &.{ "-sonline::push", "-sonline::clone::ssh_cert", "-sonline::clone::ssh_with_paths", "-sonline::clone::path_whitespace_ssh", "-sonline::clone::ssh_auth_methods" });
+            }
         }
     }
 }

@@ -19,6 +19,16 @@
             .hash = "mbedtls-3.6.4-E4NUR24VAADBF5pt-No-Z90DjozkzySYAgq6eDFy9Xdy",
             .lazy = true,
         },
+        .libssh2 = .{
+            // TODO: merge https://github.com/allyourcodebase/libssh2/pull/11
+            .url = "git+https://github.com/dasimmet/libssh2?ref=feature/mbedtls-dependency#5e39e4fdde45d031ca417ab7f6a20004264f3acf",
+            .hash = "libssh2-1.11.1-JgdeR2AYAAAI5JWiLCEquyMH25Q0m3IXODXotOojEsUS",
+            .lazy = true,
+        },
+        .zlib = .{
+            .url = "git+https://github.com/allyourcodebase/zlib.git?ref=1.3.2#d3b5519d3b73616a6bfece0712f080029d2a9244",
+            .hash = "zlib-1.3.2-ZZQ7lc8NAAAHm9MDfplvwoesXvk4tVm6VCsiI8KnIbT0",
+        },
     },
     .paths = .{
         "build.zig",

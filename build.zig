@@ -322,14 +322,16 @@ pub fn build(b: *std.Build) !void {
         }));
         features.addValues(.{ .GIT_REGEX_BUILTIN = 1 });
     }
-    {
-        const zlib = b.dependency("zlib", .{
+    const zlib_includes = blk: {
+        const zlib_dep = b.dependency("zlib", .{
             .target = target,
             .optimize = optimize,
         });
-        mod.linkLibrary(zlib.artifact("z"));
+        const zlib = zlib_dep.artifact("z");
+        mod.linkLibrary(zlib);
         features.addValues(.{ .GIT_COMPRESSION_ZLIB = 1 });
-    }
+        break :blk zlib.getEmittedIncludeTree();
+    };
     // xdiff
     {
         // Bundled xdiff dependency relies on libgit2 headers & utils, so we
@@ -485,6 +487,7 @@ pub fn build(b: *std.Build) !void {
         runner.addIncludePath(libgit_src.path("src/util"));
         runner.addIncludePath(libgit_src.path("src/libgit2"));
 
+        runner.addIncludePath(zlib_includes);
         runner.addIncludePath(libgit_src.path("deps/xdiff"));
         runner.addIncludePath(libgit_src.path("deps/pcre"));
         maybeAddTlsIncludes(runner, tls_dep, tls_backend);

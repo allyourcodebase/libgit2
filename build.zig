@@ -485,7 +485,6 @@ pub fn build(b: *std.Build) !void {
         runner.addIncludePath(libgit_src.path("src/util"));
         runner.addIncludePath(libgit_src.path("src/libgit2"));
 
-        runner.addIncludePath(libgit_src.path("deps/zlib"));
         runner.addIncludePath(libgit_src.path("deps/xdiff"));
         runner.addIncludePath(libgit_src.path("deps/pcre"));
         maybeAddTlsIncludes(runner, tls_dep, tls_backend);
@@ -892,18 +891,6 @@ const pcre_sources = [_][]const u8{
     "deps/pcre/pcre_version.c",
     "deps/pcre/pcre_xclass.c",
     "deps/pcre/pcreposix.c",
-};
-
-const zlib_sources = [_][]const u8{
-    "deps/zlib/adler32.c",
-    "deps/zlib/crc32.c",
-    "deps/zlib/deflate.c",
-    "deps/zlib/infback.c",
-    "deps/zlib/inffast.c",
-    "deps/zlib/inflate.c",
-    "deps/zlib/inftrees.c",
-    "deps/zlib/trees.c",
-    "deps/zlib/zutil.c",
 };
 
 const xdiff_sources = [_][]const u8{

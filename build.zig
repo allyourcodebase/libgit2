@@ -598,6 +598,7 @@ pub fn build(b: *std.Build) !void {
                 const clar = self.b.addRunArtifact(self.clar_parser);
                 self.top_level_step.dependOn(&clar.step);
                 clar.setName(self.b.fmt("test-{s}", .{name}));
+                clar.addArg(name);
                 clar.addArtifactArg(self.runner);
                 return clar;
             }

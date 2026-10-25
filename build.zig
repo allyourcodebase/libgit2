@@ -231,10 +231,22 @@ pub fn build(b: *std.Build) !void {
         if (b.systemIntegrationOption("ssh2", .{})) {
             mod.linkSystemLibrary("ssh2", .{});
         } else {
+            const crypto_backend: enum {
+                openssl,
+                mbedtls,
+                wincng,
+            } = if (target.result.os.tag == .windows)
+                .wincng
+            else switch (tls_backend) {
+                .openssl => .openssl,
+                .mbedtls => .mbedtls,
+                // fallback to mbedtls
+                else => .mbedtls,
+            };
             if (b.lazyDependency("libssh2", .{
                 .target = target,
                 .optimize = optimize,
-                .@"crypto-backend" = .mbedtls,
+                .@"crypto-backend" = crypto_backend,
                 .@"link-system-crypto-backend" = false,
                 .zlib = true,
             })) |libssh2| {

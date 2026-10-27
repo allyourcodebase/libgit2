@@ -1,6 +1,5 @@
 //! Runs a Clar test and lightly parses it's [TAP](https://testanything.org/) stream,
 //! reporting progress/errors to the build system.
-// @Todo report progress/errors to the build system
 
 const std = @import("std");
 const mem = std.mem;
@@ -11,15 +10,18 @@ pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const args = (try init.minimal.args.toSlice(arena))[1..];
 
-    if (args.len < 1) {
-        std.log.err("expected at least one argument", .{});
+    if (args.len < 2) {
+        std.log.err("expected at least 2 arguments, got: {d}", .{args.len});
         return error.InvalidArgs;
     }
 
+    const parent_progress_node = std.Progress.start(io, .{ .root_name = args[0] });
+    defer parent_progress_node.end();
+
     var argv_list: std.ArrayList([]const u8) = try .initCapacity(arena, args.len + 1);
-    argv_list.appendAssumeCapacity(args[0]); // test runner executable
+    argv_list.appendAssumeCapacity(args[1]); // test runner executable
     argv_list.appendAssumeCapacity("-t"); // force TAP output
-    argv_list.appendSliceAssumeCapacity(args[1..]); // test runner args
+    argv_list.appendSliceAssumeCapacity(args[2..]); // test runner args
 
     var runner = try std.process.spawn(io, .{
         .argv = argv_list.items,
@@ -33,28 +35,39 @@ pub fn main(init: std.process.Init) !u8 {
     const r = &file_reader.interface;
 
     var parser: TapParser = .default;
-    var errors: std.ArrayList([]const u8) = .empty;
+    var errors: std.ArrayList(TapParser.Result.Failure) = .empty;
 
+    // not all tests belong to a suite, so start_suite isn't guaranteed to
+    // occur before tests start running.
     var suite: ?[]const u8 = null;
+    var node: ?std.Progress.Node = null;
+    defer if (node) |n| n.end();
+
+    // @Todo track number of tests passed/failed/skipped?
     var error_found: bool = false;
     while (r.takeDelimiter('\n')) |line| {
         switch (try parser.parseLine(arena, line orelse break)) {
             .start_suite => |s| {
-                // @Todo integrate with build progress nodes instead
+                if (node) |n| n.end();
+                node = parent_progress_node.start(s, 0);
+
+                try report_errors(io, errors.items, suite);
+                errors.clearRetainingCapacity();
                 if (suite) |last_suite| {
-                    if (try check_errors(io, errors.items, last_suite)) {
-                        error_found = true;
-                    }
+                    // in the common case there are many suite names and few errors,
+                    // so suite will likely be the most recent allocation.
                     arena.free(last_suite);
-                    errors.clearRetainingCapacity();
                 }
                 suite = s;
             },
-            .ok => {},
+            .ok => {
+                if (node) |n| n.completeOne();
+            },
             .failure => |fail| {
-                try errors.append(arena, fail.description.items);
-                try errors.appendSlice(arena, fail.reasons.items);
-                try errors.append(arena, "\n");
+                error_found = true;
+                std.Progress.setStatus(.failure_working);
+                if (node) |n| n.completeOne();
+                try errors.append(arena, fail);
                 parser.reset();
             },
             .feed_line => {},
@@ -65,28 +78,74 @@ pub fn main(init: std.process.Init) !u8 {
     }
 
     _ = try runner.wait(io); // @Todo report term?
-    if (try check_errors(io, errors.items, suite)) {
-        error_found = true;
-    }
-
+    try report_errors(io, errors.items, suite);
     return @intFromBool(error_found);
 }
 
-pub fn check_errors(io: std.Io, errors: []const []const u8, suite: ?[]const u8) !bool {
-    if (errors.len > 0) {
-        const stderr = std.Io.File.stderr();
-        var stderr_buf: [1024]u8 = undefined;
-        var stderr_writer = stderr.writerStreaming(io, &stderr_buf);
+fn report_errors(
+    io: std.Io,
+    failures: []const TapParser.Result.Failure,
+    suite: ?[]const u8,
+) !void {
+    if (failures.len > 0) {
+        var stderr_buf: [256]u8 = undefined;
+        const term = (try io.lockStderr(&stderr_buf, null)).terminal();
+        defer io.unlockStderr(); // flushes stderr
 
-        try stderr_writer.interface.print("errors in suite: {?s}\n", .{suite});
-        for (errors) |err| {
-            try stderr_writer.interface.writeAll(err);
-            try stderr_writer.interface.writeByte('\n');
+        try term.setColor(.red);
+        try term.writer.writeAll("errors");
+        try term.setColor(.reset);
+        try term.writer.print(" in suite: {?s}\n\n", .{suite});
+        for (failures) |fail| {
+            try term.setColor(.red);
+            try term.writer.writeAll("test failure: ");
+            try term.setColor(.reset);
+            try term.writer.writeAll(fail.description.test_name);
+            try term.writer.writeAll(": ");
+            try term.setColor(.dim);
+            try term.writer.writeAll(fail.description.file_path_and_line.items);
+            try term.setColor(.reset);
+            try term.writer.writeByte('\n');
+
+            print_line: {
+                const sep_idx = std.mem.findScalar(u8, fail.description.file_path_and_line.items, ':').?;
+                const path = fail.description.file_path_and_line.items[0..sep_idx];
+                const line = std.fmt.parseUnsigned(
+                    usize,
+                    fail.description.file_path_and_line.items[sep_idx + 1 ..],
+                    0,
+                ) catch {
+                    @branchHint(.unlikely);
+                    break :print_line;
+                };
+
+                // print the offending line
+                if (std.Io.Dir.cwd().openFile(io, path, .{})) |file| {
+                    defer file.close(io);
+                    var buf: [256]u8 = undefined;
+                    var freader = file.reader(io, &buf);
+
+                    for (0..line -| 1) |_| {
+                        _ = freader.interface.discardDelimiterInclusive('\n') catch break;
+                    }
+                    _ = try freader.interface.streamDelimiterEnding(term.writer, '\n');
+                    try term.writer.writeByte('\n');
+                } else |_| {
+                    @branchHint(.unlikely);
+                    break :print_line;
+                }
+            }
+
+            for (fail.reasons.items) |reason| {
+                try term.setColor(.bright_cyan);
+                try term.writer.writeAll("reason: ");
+                try term.setColor(.reset);
+                try term.writer.writeAll(reason);
+                try term.writer.writeByte('\n');
+            }
+            try term.writer.writeByte('\n');
         }
-        try stderr_writer.flush();
-        return true;
     }
-    return false;
 }
 
 const TapParser = struct {
@@ -100,7 +159,10 @@ const TapParser = struct {
         feed_line,
 
         const Failure = struct {
-            description: std.ArrayList(u8),
+            description: struct {
+                test_name: []const u8,
+                file_path_and_line: std.ArrayList(u8),
+            },
             reasons: std.ArrayList([]const u8),
         };
     };
@@ -147,8 +209,7 @@ const TapParser = struct {
             .desc => {
                 const name_start = skip(line, keyword.spacer1, keyword.not_ok.len) orelse @panic("expected spacer");
                 const name = mem.trim(u8, line[name_start..], &std.ascii.whitespace);
-                try p.wip_failure.description.appendSlice(arena, name);
-                try p.wip_failure.description.appendSlice(arena, ": ");
+                p.wip_failure.description.test_name = try arena.dupe(u8, name);
                 p.state = .yaml_start;
             },
             .yaml_start => {
@@ -170,14 +231,14 @@ const TapParser = struct {
             .file => {
                 const file_start = skip(line, keyword.file, 0) orelse @panic("expected file");
                 const file = mem.trim(u8, line[file_start..], std.ascii.whitespace ++ "'");
-                try p.wip_failure.description.appendSlice(arena, file);
-                try p.wip_failure.description.append(arena, ':');
+                try p.wip_failure.description.file_path_and_line.appendSlice(arena, file);
                 p.state = .line;
             },
             .line => {
                 const line_start = skip(line, keyword.line, 0) orelse @panic("expected line");
                 const fail_line = mem.trim(u8, line[line_start..], &std.ascii.whitespace);
-                try p.wip_failure.description.appendSlice(arena, fail_line);
+                try p.wip_failure.description.file_path_and_line.append(arena, ':');
+                try p.wip_failure.description.file_path_and_line.appendSlice(arena, fail_line);
                 p.state = .start;
                 return .{ .failure = p.wip_failure };
             },
@@ -194,7 +255,10 @@ const TapParser = struct {
     const default: TapParser = .{
         .state = .start,
         .wip_failure = .{
-            .description = .empty,
+            .description = .{
+                .test_name = &.{},
+                .file_path_and_line = .empty,
+            },
             .reasons = .empty,
         },
     };

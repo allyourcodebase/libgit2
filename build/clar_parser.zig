@@ -106,7 +106,40 @@ fn report_errors(
             try term.writer.writeAll(fail.description.file_path_and_line.items);
             try term.setColor(.reset);
             try term.writer.writeByte('\n');
+
+            print_line: {
+                const sep_idx = std.mem.findScalar(u8, fail.description.file_path_and_line.items, ':').?;
+                const path = fail.description.file_path_and_line.items[0..sep_idx];
+                const line = std.fmt.parseUnsigned(
+                    usize,
+                    fail.description.file_path_and_line.items[sep_idx + 1 ..],
+                    0,
+                ) catch {
+                    @branchHint(.unlikely);
+                    break :print_line;
+                };
+
+                // print the offending line
+                if (std.Io.Dir.cwd().openFile(io, path, .{})) |file| {
+                    defer file.close(io);
+                    var buf: [256]u8 = undefined;
+                    var freader = file.reader(io, &buf);
+
+                    for (0..line -| 1) |_| {
+                        _ = freader.interface.discardDelimiterInclusive('\n') catch break;
+                    }
+                    _ = try freader.interface.streamDelimiterEnding(term.writer, '\n');
+                    try term.writer.writeByte('\n');
+                } else |_| {
+                    @branchHint(.unlikely);
+                    break :print_line;
+                }
+            }
+
             for (fail.reasons.items) |reason| {
+                try term.setColor(.bright_cyan);
+                try term.writer.writeAll("reason: ");
+                try term.setColor(.reset);
                 try term.writer.writeAll(reason);
                 try term.writer.writeByte('\n');
             }

@@ -295,7 +295,7 @@ pub fn build(b: *std.Build) !void {
                 .PCRE2_LINK_SIZE = 2,
                 .PCRE2_PARENS_NEST_LIMIT = 250,
                 .PCRE2_MATCH_LIMIT = 10000000,
-                .PCRE_MATCH_LIMIT_RECURSION = "MATCH_LIMIT",
+                .PCRE2_MATCH_LIMIT_DEPTH = "MATCH_LIMIT",
                 .NEWLINE_DEFAULT = '\n',
                 .NO_RECURSE = 1,
                 .PCRE_POSIX_MALLOC_THRESHOLD = 10,

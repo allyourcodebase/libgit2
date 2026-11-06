@@ -289,7 +289,7 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         });
         pcre.addConfigHeader(b.addConfigHeader(
-            .{ .style = .{ .cmake = libgit_src.path("deps/pcre/config.h.in") } },
+            .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
                 .SUPPORT_PCRE8 = 1,
                 .PCRE_LINK_SIZE = 2,
@@ -303,9 +303,9 @@ pub fn build(b: *std.Build) !void {
                 .PCREGREP_BUFSIZE = null,
             },
         ));
-        pcre.addIncludePath(libgit_src.path("deps/pcre"));
+        pcre.addIncludePath(libgit_src.path("deps/pcre2"));
         pcre.addCSourceFiles(.{
-            .root = libgit_src.path("deps/pcre"),
+            .root = libgit_src.path("deps/pcre2"),
             .files = &sources.pcre,
             .flags = &.{
                 "-Wno-unused-function",
@@ -314,7 +314,7 @@ pub fn build(b: *std.Build) !void {
             },
         });
 
-        mod.addIncludePath(libgit_src.path("deps/pcre"));
+        mod.addIncludePath(libgit_src.path("deps/pcre2"));
         mod.linkLibrary(b.addLibrary(.{
             .name = "pcre",
             .linkage = .static,
@@ -489,7 +489,7 @@ pub fn build(b: *std.Build) !void {
 
         runner.addIncludePath(zlib_includes);
         runner.addIncludePath(libgit_src.path("deps/xdiff"));
-        runner.addIncludePath(libgit_src.path("deps/pcre"));
+        runner.addIncludePath(libgit_src.path("deps/pcre2"));
         maybeAddTlsIncludes(runner, tls_dep, tls_backend);
 
         runner.linkLibrary(lib);

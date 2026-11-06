@@ -292,6 +292,8 @@ pub fn build(b: *std.Build) !void {
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
                 .SUPPORT_PCRE8 = 1,
+                .PCRE2_HEAP_LIMIT = 20000000,
+                .PCRE2_MAX_VARLOOKBEHIND = 255,
                 .PCRE2_LINK_SIZE = 2,
                 .PCRE2_PARENS_NEST_LIMIT = 250,
                 .PCRE2_MATCH_LIMIT = 10000000,
@@ -299,6 +301,7 @@ pub fn build(b: *std.Build) !void {
                 .NEWLINE_DEFAULT = '\n',
                 .BSR_ANYCRLF = 0,
                 .PCRE2GREP_BUFSIZE = null,
+                .PCRE2GREP_MAX_BUFSIZE = 1048576,
             },
         ));
         pcre.addIncludePath(libgit_src.path("deps/pcre2"));

@@ -292,15 +292,15 @@ pub fn build(b: *std.Build) !void {
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
                 .SUPPORT_PCRE8 = 1,
-                .PCRE_LINK_SIZE = 2,
-                .PCRE_PARENS_NEST_LIMIT = 250,
-                .PCRE_MATCH_LIMIT = 10000000,
+                .PCRE2_LINK_SIZE = 2,
+                .PCRE2_PARENS_NEST_LIMIT = 250,
+                .PCRE2_MATCH_LIMIT = 10000000,
                 .PCRE_MATCH_LIMIT_RECURSION = "MATCH_LIMIT",
-                .NEWLINE = '\n',
+                .NEWLINE_DEFAULT = '\n',
                 .NO_RECURSE = 1,
                 .PCRE_POSIX_MALLOC_THRESHOLD = 10,
                 .BSR_ANYCRLF = 0,
-                .PCREGREP_BUFSIZE = null,
+                .PCRE2GREP_BUFSIZE = null,
             },
         ));
         pcre.addIncludePath(libgit_src.path("deps/pcre2"));

@@ -24,6 +24,7 @@ pub fn build(b: *std.Build) !void {
         .{
             .GIT_THREADS = 1,
             .GIT_USE_NSEC = 1,
+            .GIT_REGEX_PCRE2 = 1,
         },
     );
 

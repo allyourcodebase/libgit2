@@ -300,7 +300,7 @@ pub fn build(b: *std.Build) !void {
                 .PCRE2_MATCH_LIMIT_DEPTH = "MATCH_LIMIT",
                 .NEWLINE_DEFAULT = '\n',
                 .BSR_ANYCRLF = 0,
-                .PCRE2GREP_BUFSIZE = null,
+                .PCRE2GREP_BUFSIZE = 20480,
                 .PCRE2GREP_MAX_BUFSIZE = 1048576,
             },
         ));

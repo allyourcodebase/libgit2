@@ -200,8 +200,8 @@
         "llhttp.c",
     },
 
-    // deps/pcre
-    .pcre = .{
+    // deps/pcre2
+    .pcre2 = .{
         "pcre2_auto_possess.c",
         "pcre2_chartables.c",
         "pcre2_chkdint.c",

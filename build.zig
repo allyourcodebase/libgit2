@@ -284,12 +284,12 @@ pub fn build(b: *std.Build) !void {
         features.addValues(.{ .GIT_HTTPPARSER_BUILTIN = 1 });
     }
     if (target.result.os.tag != .macos) {
-        const pcre = b.createModule(.{
+        const pcre2 = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
         });
-        pcre.addConfigHeader(b.addConfigHeader(
+        pcre2.addConfigHeader(b.addConfigHeader(
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
                 .PCRE2_EXPORT = null,
@@ -306,10 +306,10 @@ pub fn build(b: *std.Build) !void {
                 .PCRE2GREP_MAX_BUFSIZE = 1048576,
             },
         ));
-        pcre.addIncludePath(libgit_src.path("deps/pcre2"));
-        pcre.addCSourceFiles(.{
+        pcre2.addIncludePath(libgit_src.path("deps/pcre2"));
+        pcre2.addCSourceFiles(.{
             .root = libgit_src.path("deps/pcre2"),
-            .files = &sources.pcre,
+            .files = &sources.pcre2,
             .flags = &.{
                 "-Wno-unused-function",
                 "-Wno-implicit-fallthrough",
@@ -321,7 +321,7 @@ pub fn build(b: *std.Build) !void {
         mod.linkLibrary(b.addLibrary(.{
             .name = "pcre2",
             .linkage = .static,
-            .root_module = pcre,
+            .root_module = pcre2,
         }));
         features.addValues(.{ .GIT_REGEX_BUILTIN = 1 });
     }

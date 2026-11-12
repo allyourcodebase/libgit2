@@ -319,7 +319,7 @@ pub fn build(b: *std.Build) !void {
 
         mod.addIncludePath(libgit_src.path("deps/pcre2"));
         mod.linkLibrary(b.addLibrary(.{
-            .name = "pcre",
+            .name = "pcre2",
             .linkage = .static,
             .root_module = pcre,
         }));

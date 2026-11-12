@@ -291,7 +291,7 @@ pub fn build(b: *std.Build) !void {
         pcre.addConfigHeader(b.addConfigHeader(
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
-                .SUPPORT_PCRE8 = 1,
+                .SUPPORT_PCRE2_8 = 1,
                 .PCRE2_HEAP_LIMIT = 20000000,
                 .PCRE2_MAX_VARLOOKBEHIND = 255,
                 .PCRE2_LINK_SIZE = 2,

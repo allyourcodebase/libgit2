@@ -15,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
         ) catch |err|
             fatal("unable to open file '{s}': {t}", .{ path, err });
         defer file.close(io);
-        file.setPermissions(io, @enumFromInt(0o755)) catch |err|
+        file.setPermissions(io, @fromBackingInt(@intCast(0o755))) catch |err|
             fatal("unable to set permissions on file '{s}': {t}", .{ path, err });
     }
 }

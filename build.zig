@@ -283,42 +283,48 @@ pub fn build(b: *std.Build) !void {
         features.addValues(.{ .GIT_HTTPPARSER_BUILTIN = 1 });
     }
     if (target.result.os.tag != .macos) {
-        const pcre = b.createModule(.{
+        const pcre2 = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
         });
-        pcre.addConfigHeader(b.addConfigHeader(
-            .{ .style = .{ .cmake = libgit_src.path("deps/pcre/config.h.in") } },
+        pcre2.addConfigHeader(b.addConfigHeader(
+            .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
-                .SUPPORT_PCRE8 = 1,
-                .PCRE_LINK_SIZE = 2,
-                .PCRE_PARENS_NEST_LIMIT = 250,
-                .PCRE_MATCH_LIMIT = 10000000,
-                .PCRE_MATCH_LIMIT_RECURSION = "MATCH_LIMIT",
-                .NEWLINE = '\n',
-                .NO_RECURSE = 1,
-                .PCRE_POSIX_MALLOC_THRESHOLD = 10,
-                .BSR_ANYCRLF = 0,
-                .PCREGREP_BUFSIZE = null,
+                .SUPPORT_PCRE2_8 = 1,
+                .SUPPORT_UNICODE = 1,
+                .NEWLINE_DEFAULT = 2,
+                .PCRE2_LINK_SIZE = 2,
+                .PCRE2_MAX_VARLOOKBEHIND = 255,
+                .PCRE2_PARENS_NEST_LIMIT = 250,
+                .PCRE2_HEAP_LIMIT = 20000000,
+                .PCRE2_MATCH_LIMIT = 10000000,
+                .PCRE2_MATCH_LIMIT_DEPTH = "MATCH_LIMIT",
+                .PCRE2GREP_BUFSIZE = {},
+                .PCRE2GREP_MAX_BUFSIZE = {},
             },
         ));
-        pcre.addIncludePath(libgit_src.path("deps/pcre"));
-        pcre.addCSourceFiles(.{
-            .root = libgit_src.path("deps/pcre"),
-            .files = &sources.pcre,
+        pcre2.addIncludePath(libgit_src.path("deps/pcre2"));
+        pcre2.addCSourceFiles(.{
+            .root = libgit_src.path("deps/pcre2"),
+            .files = &sources.pcre2,
             .flags = &.{
                 "-Wno-unused-function",
                 "-Wno-implicit-fallthrough",
                 "-DHAVE_CONFIG_H",
+                "-DPCRE2_CODE_UNIT_WIDTH=8",
+                "-DPCRE2_STATIC",
+                "-DPCRE2_EXPORT=",
+                "-DPCRE2_EXP_DECL=",
+                "-DPCRE2_EXP_DEFN=",
             },
         });
 
-        mod.addIncludePath(libgit_src.path("deps/pcre"));
+        mod.addIncludePath(libgit_src.path("deps/pcre2"));
         mod.linkLibrary(b.addLibrary(.{
-            .name = "pcre",
+            .name = "pcre2",
             .linkage = .static,
-            .root_module = pcre,
+            .root_module = pcre2,
         }));
         features.addValues(.{ .GIT_REGEX_BUILTIN = 1 });
     }
@@ -489,7 +495,7 @@ pub fn build(b: *std.Build) !void {
 
         runner.addIncludePath(zlib_includes);
         runner.addIncludePath(libgit_src.path("deps/xdiff"));
-        runner.addIncludePath(libgit_src.path("deps/pcre"));
+        runner.addIncludePath(libgit_src.path("deps/pcre2"));
         maybeAddTlsIncludes(runner, tls_dep, tls_backend);
 
         runner.linkLibrary(lib);

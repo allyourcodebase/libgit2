@@ -9,11 +9,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  # Share a single local cache between all zig build steps
-  ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache
-  ZIG_LOCAL_PKG_DIR: ${{ github.workspace }}/zig-pkg
-
 jobs:
   build:
     strategy:

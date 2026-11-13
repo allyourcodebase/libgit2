@@ -24,7 +24,6 @@ pub fn build(b: *std.Build) !void {
         .{
             .GIT_THREADS = 1,
             .GIT_USE_NSEC = 1,
-            .GIT_REGEX_PCRE2 = 1,
         },
     );
 
@@ -292,18 +291,17 @@ pub fn build(b: *std.Build) !void {
         pcre2.addConfigHeader(b.addConfigHeader(
             .{ .style = .{ .cmake = libgit_src.path("deps/pcre2/config.h.in") } },
             .{
-                .PCRE2_EXPORT = null,
                 .SUPPORT_PCRE2_8 = 1,
-                .PCRE2_HEAP_LIMIT = 20000000,
-                .PCRE2_MAX_VARLOOKBEHIND = 255,
+                .SUPPORT_UNICODE = 1,
+                .NEWLINE_DEFAULT = 2,
                 .PCRE2_LINK_SIZE = 2,
+                .PCRE2_MAX_VARLOOKBEHIND = 255,
                 .PCRE2_PARENS_NEST_LIMIT = 250,
+                .PCRE2_HEAP_LIMIT = 20000000,
                 .PCRE2_MATCH_LIMIT = 10000000,
                 .PCRE2_MATCH_LIMIT_DEPTH = "MATCH_LIMIT",
-                .NEWLINE_DEFAULT = 2,
-                .BSR_ANYCRLF = 0,
-                .PCRE2GREP_BUFSIZE = 20480,
-                .PCRE2GREP_MAX_BUFSIZE = 1048576,
+                .PCRE2GREP_BUFSIZE = {},
+                .PCRE2GREP_MAX_BUFSIZE = {},
             },
         ));
         pcre2.addIncludePath(libgit_src.path("deps/pcre2"));
@@ -314,6 +312,11 @@ pub fn build(b: *std.Build) !void {
                 "-Wno-unused-function",
                 "-Wno-implicit-fallthrough",
                 "-DHAVE_CONFIG_H",
+                "-DPCRE2_CODE_UNIT_WIDTH=8",
+                "-DPCRE2_STATIC",
+                "-DPCRE2_EXPORT=",
+                "-DPCRE2_EXP_DECL=",
+                "-DPCRE2_EXP_DEFN=",
             },
         });
 
